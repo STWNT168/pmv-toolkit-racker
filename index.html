@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#0a3d62">
+<meta name="description" content="PMV Toolkit Management System — Department of Posts">
+<title>PMV Toolkit Tracker</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="toast-container" class="toast-container"></div>
+
+<div id="modal-backdrop" class="modal-backdrop hidden">
+  <div id="modal" class="modal"></div>
+</div>
+
+<!-- ===================== LOGIN VIEW ===================== -->
+<section id="view-login" class="view">
+  <div class="login-card">
+    <div class="brand-mark">
+      <div class="brand-icon">✉</div>
+      <div>
+        <h1>PMV Toolkit Tracker</h1>
+        <p class="brand-sub">Department of Posts · Udhampur Division</p>
+      </div>
+    </div>
+
+    <form id="login-form" class="login-form">
+      <div class="field-group">
+        <label for="login-user-id">User ID</label>
+        <input type="text" id="login-user-id" placeholder="e.g. SPM101" required autocomplete="username">
+      </div>
+      <div class="field-group">
+        <label for="login-mobile">Registered Mobile Number</label>
+        <input type="tel" id="login-mobile" placeholder="10-digit mobile number" required pattern="[0-9]{10}" autocomplete="tel">
+      </div>
+      <button type="submit" id="login-submit" class="btn btn-primary btn-block">SIGN IN</button>
+    </form>
+    <p class="login-footnote">Access is restricted to authorized SPM / DPS / Admin users of Udhampur Division.</p>
+  </div>
+</section>
+
+<!-- ===================== APP SHELL (post-login) ===================== -->
+<section id="view-app" class="view hidden">
+  <header id="app-shell" class="app-header hidden">
+    <div class="app-header-top">
+      <div class="app-title">
+        <span class="app-title-icon">✉</span>
+        <span>PMV Toolkit Tracker</span>
+      </div>
+      <div id="connectivity-badge" class="connectivity-badge online">Online</div>
+    </div>
+    <div class="app-header-bottom">
+      <div class="user-chip">
+        <span id="nav-user-name">—</span>
+        <span id="nav-user-role" class="role-pill">—</span>
+      </div>
+      <nav class="app-nav">
+        <button id="nav-btn-entry" class="nav-btn hidden">Daily Entry</button>
+        <button id="nav-btn-dashboard" class="nav-btn hidden">Dashboard</button>
+        <button id="nav-logout" class="nav-btn nav-btn-logout">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ---------- SPM ENTRY SCREEN ---------- -->
+  <main id="screen-entry" class="screen hidden">
+    <form id="spm-form" class="form-shell" onsubmit="return false;">
+      <div class="card">
+        <h2 class="card-title">Daily Delivery Update</h2>
+        <div class="field-row">
+          <div class="field-group">
+            <label for="spm-date">Date</label>
+            <input type="date" id="spm-date" required>
+          </div>
+          <div class="field-group">
+            <label for="spm-office">Office</label>
+            <select id="spm-office" required>
+              <option value="">Select Office</option>
+            </select>
+          </div>
+        </div>
+        <input type="hidden" id="spm-prev-pending-hidden" value="0">
+      </div>
+
+      <div class="card card-muted">
+        <h3 class="card-subtitle">Previous Day <span id="prev-date-label" class="muted"></span></h3>
+        <div class="prev-day-grid">
+          <div><span class="stat-label">Came</span><span id="prev-came" class="stat-value">—</span></div>
+          <div><span class="stat-label">Delivered</span><span id="prev-delivered" class="stat-value">—</span></div>
+          <div><span class="stat-label">Redirected</span><span id="prev-redirected" class="stat-value">—</span></div>
+          <div><span class="stat-label">Pending</span><span id="prev-pending" class="stat-value">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-subtitle">Today's Delivery</h3>
+        <div class="field-group">
+          <label for="kits-came">Kits Came Today</label>
+          <input type="number" id="kits-came" inputmode="numeric" min="0" placeholder="0" required>
+        </div>
+        <div class="field-group">
+          <label for="kits-delivered">Kits Delivered</label>
+          <input type="number" id="kits-delivered" inputmode="numeric" min="0" placeholder="0">
+        </div>
+        <div class="field-group">
+          <label for="redirected">Redirected</label>
+          <input type="number" id="redirected" inputmode="numeric" min="0" placeholder="0">
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-subtitle">Pending</h3>
+        <div class="field-group">
+          <label for="mobile-invalid">Mobile Number Invalid</label>
+          <input type="number" id="mobile-invalid" inputmode="numeric" min="0" placeholder="0">
+        </div>
+        <div class="field-group">
+          <label for="address-not-found">Address Not Found</label>
+          <input type="number" id="address-not-found" inputmode="numeric" min="0" placeholder="0">
+        </div>
+        <div class="field-group">
+          <label for="torn-condition">Torn Condition</label>
+          <input type="number" id="torn-condition" inputmode="numeric" min="0" placeholder="0">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title-row">
+          <h3 class="card-subtitle">Incomplete Set</h3>
+          <span class="badge-total">Total: <span id="total-incomplete">0</span></span>
+        </div>
+        <div id="incomplete-rows"></div>
+        <button type="button" id="add-incomplete-set" class="btn btn-outline btn-block">+ Add Set</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title-row">
+          <h3 class="card-subtitle">Complete Set Pending</h3>
+          <span class="badge-total">Total: <span id="total-complete">0</span></span>
+        </div>
+        <div id="complete-rows"></div>
+        <button type="button" id="add-complete-set" class="btn btn-outline btn-block">+ Add Set</button>
+      </div>
+
+      <ul id="form-errors" class="form-errors hidden"></ul>
+      <p id="sum-warning" class="sum-warning hidden"></p>
+
+      <div class="card summary-card">
+        <div class="summary-row">
+          <span>TOTAL PENDING</span>
+          <b id="total-pending">0</b>
+        </div>
+        <div class="summary-row">
+          <span>DELIVERY %</span>
+          <b id="delivery-percent">0.0%</b>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button type="button" id="btn-save-draft" class="btn btn-secondary btn-block">SAVE DRAFT</button>
+        <button type="button" id="btn-submit" class="btn btn-primary btn-block">SUBMIT</button>
+      </div>
+
+      <div class="sync-status-row">
+        <span id="sync-status" class="sync-badge">—</span>
+      </div>
+    </form>
+  </main>
+
+  <!-- ---------- DPS DASHBOARD SCREEN ---------- -->
+  <main id="screen-dashboard" class="screen hidden">
+    <div class="card filters-card">
+      <h2 class="card-title">Consolidated Dashboard</h2>
+      <div class="filters-grid">
+        <div class="field-group">
+          <label for="dash-date-from">From</label>
+          <input type="date" id="dash-date-from">
+        </div>
+        <div class="field-group">
+          <label for="dash-date-to">To</label>
+          <input type="date" id="dash-date-to">
+        </div>
+        <div class="field-group">
+          <label for="dash-office-filter">Office</label>
+          <select id="dash-office-filter"><option value="">All Offices</option></select>
+        </div>
+        <button id="dash-apply-filters" class="btn btn-primary">APPLY</button>
+      </div>
+    </div>
+
+    <div id="dashboard-loading" class="loading-indicator hidden">Loading dashboard data…</div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><span class="kpi-label">Total Kits Came</span><span id="kpi-total-came" class="kpi-value">0</span></div>
+      <div class="kpi-card"><span class="kpi-label">Total Delivered</span><span id="kpi-total-delivered" class="kpi-value">0</span></div>
+      <div class="kpi-card"><span class="kpi-label">Total Redirected</span><span id="kpi-total-redirected" class="kpi-value">0</span></div>
+      <div class="kpi-card kpi-alert"><span class="kpi-label">Total Pending</span><span id="kpi-total-pending" class="kpi-value">0</span></div>
+      <div class="kpi-card kpi-good"><span class="kpi-label">Delivery %</span><span id="kpi-delivery-pct" class="kpi-value">0.0%</span></div>
+      <div class="kpi-card"><span class="kpi-label">Mobile Invalid</span><span id="kpi-mobile-invalid" class="kpi-value">0</span></div>
+      <div class="kpi-card"><span class="kpi-label">Address Not Found</span><span id="kpi-address-not-found" class="kpi-value">0</span></div>
+      <div class="kpi-card"><span class="kpi-label">Torn Condition</span><span id="kpi-torn" class="kpi-value">0</span></div>
+      <div class="kpi-card"><span class="kpi-label">Incomplete Kits</span><span id="kpi-incomplete" class="kpi-value">0</span></div>
+      <div class="kpi-card"><span class="kpi-label">Complete Kits</span><span id="kpi-complete" class="kpi-value">0</span></div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card"><canvas id="chart-date-trend"></canvas></div>
+      <div class="chart-card"><canvas id="chart-office-pct"></canvas></div>
+      <div class="chart-card"><canvas id="chart-pending-breakdown"></canvas></div>
+      <div class="chart-card"><canvas id="chart-delivered-vs-pending"></canvas></div>
+      <div class="chart-card"><canvas id="chart-weekly-trend"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title-row">
+        <h3 class="card-subtitle">Office-wise Report</h3>
+        <div class="table-tools">
+          <input type="text" id="office-table-search" placeholder="Search office…">
+          <button id="dash-export-csv" class="btn btn-outline">Export CSV</button>
+          <button id="dash-print" class="btn btn-outline">Print</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="office-table">
+          <thead>
+            <tr>
+              <th data-sort="officeName">Office</th>
+              <th data-sort="kitsCameToday">Came</th>
+              <th data-sort="kitsDelivered">Delivered</th>
+              <th data-sort="redirected">Redirected</th>
+              <th data-sort="totalPending">Pending</th>
+              <th data-sort="deliveryPercentage">Delivery %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 class="card-subtitle">Date-wise Consolidated Data</h3>
+      <div class="table-scroll">
+        <table id="date-table">
+          <thead>
+            <tr><th>Date</th><th>Came</th><th>Delivered</th><th>Redirected</th><th>Pending</th><th>Delivery %</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</section>
+
+<script src="js/config.js"></script>
+<script src="js/calculations.js"></script>
+<script src="js/validation.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/spm.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
