@@ -9,7 +9,7 @@
 const CONFIG = Object.freeze({
   // Replace with your deployed Apps Script Web App URL, e.g.
   // "https://script.google.com/macros/s/AKfycb.../exec"
-  API_URL: "YOUR_APPS_SCRIPT_WEB_APP_URL",
+  API_URL: "https://script.google.com/macros/s/AKfycbx-OuPXs75xUz6cKOEtU-UGkjdA37LP53DMW5hU8nIEWlniAzZ3ztLF7iIaCk7l17WSRQ/exec",
 
   APP_NAME: "PMV Toolkit Management System",
   SHORT_NAME: "PMV Tracker",
