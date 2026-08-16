@@ -1,6 +1,6 @@
 /**
- * api.js
- * Google Apps Script API wrapper.
+ * api.js replacement for V5.0.4
+ * Adds the two SPM current-day endpoints directly to Api.
  */
 const Api = (() => {
   async function get(action, params = {}) {
@@ -33,13 +33,11 @@ const Api = (() => {
   }
 
   async function parseResponse(res) {
-    let text = "";
-    try { text = await res.text(); } catch(e) { throw new Error("Could not read the server response."); }
+    const text = await res.text();
     let body;
     try { body = JSON.parse(text); }
     catch(e) { throw new Error("Server returned a non-JSON response (HTTP " + res.status + "). Check Apps Script deployment."); }
     if (!body || typeof body.success === "undefined") throw new Error("Malformed server response from Apps Script.");
-    if (!res.ok && body.success !== false) throw new Error(`Server HTTP error ${res.status}.`);
     return body;
   }
 
@@ -48,11 +46,19 @@ const Api = (() => {
   const getPreviousDay = (officeId, date) => get("getPreviousDay", { officeId, date });
   const getHistory = (officeId, from, to) => get("getHistory", { officeId, from, to });
   const getDashboardData = params => get("getDashboardData", params || {});
+  const getAdminTodayUpdateStatus = date => get("getAdminTodayUpdateStatus", { date });
+  const getOwnTodayRecord = () => get("getOwnTodayRecord");
+  const deleteOwnTodayRecord = (recordId) => post("deleteOwnTodayRecord", { recordId });
+
   const submitDailyRecord = (record, session) => post("submitDailyRecord", { record, session });
   const syncOfflineRecord = (record, session) => post("syncOfflineRecord", { record, session });
   const updateDailyRecord = (record, session) => post("updateDailyRecord", { record, session });
   const login = (userId, mobile) => post("login", { userId, mobile });
   const logout = session => post("logout", { session });
 
-  return {getOfficeList,getUser,getPreviousDay,getHistory,getDashboardData,submitDailyRecord,syncOfflineRecord,updateDailyRecord,login,logout,get,post};
+  return {
+    getOfficeList, getUser, getPreviousDay, getHistory, getDashboardData,
+    getAdminTodayUpdateStatus, getOwnTodayRecord, deleteOwnTodayRecord,
+    submitDailyRecord, syncOfflineRecord, updateDailyRecord, login, logout, get, post
+  };
 })();
