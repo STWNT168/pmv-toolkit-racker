@@ -63,6 +63,12 @@ function doGet(e) {
           p.date || todayISO()
         );
         break;
+      case "getOfficeWiseReport":
+        result = getOfficeWiseReport(
+          requireSessionParam(p.session),
+          p.date || todayISO()
+        );
+        break;
       default:
         result = errorResponse("Unknown GET action.");
     }
@@ -439,17 +445,28 @@ function getDashboardData(params, session) {
         kitsCameToday: 0,
         kitsDelivered: 0,
         redirected: 0,
-        totalPending: 0
+        totalPending: 0,
+        mobileInvalid: 0,
+        addressNotFound: 0,
+        torn: 0,
+        incompleteKits: 0,
+        completeKits: 0
       };
     }
     officeMap[key].kitsCameToday += Number(r.KITS_CAME_TODAY) || 0;
     officeMap[key].kitsDelivered += Number(r.KITS_DELIVERED) || 0;
     officeMap[key].redirected += Number(r.REDIRECTED) || 0;
     officeMap[key].totalPending += Number(r.TOTAL_PENDING) || 0;
+    officeMap[key].mobileInvalid += Number(r.MOBILE_NUMBER_INVALID) || 0;
+    officeMap[key].addressNotFound += Number(r.ADDRESS_NOT_FOUND) || 0;
+    officeMap[key].torn += Number(r.TORN_CONDITION) || 0;
+    officeMap[key].incompleteKits += Number(r.KITS_INCOMPLETE) || 0;
+    officeMap[key].completeKits += Number(r.KITS_COMPLETE) || 0;
   });
 
   const officeWise = Object.values(officeMap).map(o => ({
     ...o,
+    tornOrWithoutAddress: o.torn + o.addressNotFound,
     deliveryPercentage: o.kitsCameToday > 0
       ? round1(o.kitsDelivered / o.kitsCameToday * 100)
       : 0
@@ -545,6 +562,19 @@ function getAdminTodayUpdateStatus(session, date) {
       .filter(Boolean)
   );
 
+  const updatedRecordsBySpm = {};
+  records
+    .filter(r => normalizeSheetDate(r.DATE) === targetDate)
+    .forEach(r => {
+      const spmId = String(r.SPM_ID || "").trim();
+      if (!spmId) return;
+      // If duplicates slip through, keep the latest submission time.
+      const existing = updatedRecordsBySpm[spmId];
+      if (!existing || String(r.SUBMITTED_AT || "") > String(existing.SUBMITTED_AT || "")) {
+        updatedRecordsBySpm[spmId] = r;
+      }
+    });
+
   const officeMap = {};
   activeOffices.forEach(o => {
     const id = String(o.OFFICE_ID || "").trim();
@@ -559,6 +589,7 @@ function getAdminTodayUpdateStatus(session, date) {
   });
 
   const pendingSpms = [];
+  const updatedSpms = [];
   activeSpms.forEach(u => {
     const spmId = String(u.USER_ID || "").trim();
     const officeId = String(u.OFFICE_ID || "").trim();
@@ -575,8 +606,17 @@ function getAdminTodayUpdateStatus(session, date) {
     }
 
     officeMap[officeId].totalSpms++;
-    if (isUpdated) officeMap[officeId].updatedSpms++;
-    else {
+    if (isUpdated) {
+      officeMap[officeId].updatedSpms++;
+      const rec = updatedRecordsBySpm[spmId];
+      updatedSpms.push({
+        spmId: spmId,
+        spmName: String(u.NAME || "").trim(),
+        officeId: officeId,
+        officeName: getAuthoritativeOfficeName(officeId, u.OFFICE_NAME),
+        submittedAt: rec ? String(rec.SUBMITTED_AT || "") : ""
+      });
+    } else {
       officeMap[officeId].pendingSpms++;
       pendingSpms.push({
         spmId: spmId,
@@ -604,9 +644,105 @@ function getAdminTodayUpdateStatus(session, date) {
     spmsPendingUpdate: totalSpms - updatedCount,
     completionPercentage: totalSpms ? round1(updatedCount / totalSpms * 100) : 0,
     officeWise: officeWise,
+    updatedSpms: updatedSpms.sort((a, b) =>
+      a.officeName.localeCompare(b.officeName) || a.spmName.localeCompare(b.spmName)
+    ),
     pendingSpms: pendingSpms.sort((a, b) =>
       a.officeName.localeCompare(b.officeName) || a.spmName.localeCompare(b.spmName)
     )
+  });
+}
+
+// ==================== V6 OFFICE-WISE STATUS REPORT ====================
+// Admin dashboard report: Pending, Delivered, Today Received, Torn/Without Address,
+// Invalid Mobile Number, Incomplete Sets, Complete Sets — office wise, for one date.
+
+function getOfficeWiseReport(session, date) {
+  const auth = authorize(session);
+  if (![ROLES.ADMIN, ROLES.DPS].includes(auth.role)) {
+    throw new Error("Only Admin/DPS users can access this report.");
+  }
+
+  const targetDate = validateDateString(date || todayISO());
+  const offices = readSheetAsObjects(SHEETS.OFFICE_MASTER).filter(o => isActive(o.ACTIVE));
+  const records = dedupeDailyRows(readSheetAsObjects(SHEETS.DAILY_DATA))
+    .filter(r => normalizeSheetDate(r.DATE) === targetDate);
+
+  const officeMap = {};
+  offices.forEach(o => {
+    const id = String(o.OFFICE_ID || "").trim();
+    if (!id) return;
+    officeMap[id] = {
+      officeId: id,
+      officeName: String(o.OFFICE_NAME || "").trim(),
+      todayReceived: 0,
+      delivered: 0,
+      pending: 0,
+      torn: 0,
+      withoutAddress: 0,
+      tornOrWithoutAddress: 0,
+      invalidMobile: 0,
+      incompleteSets: 0,
+      completeSets: 0,
+      reported: false
+    };
+  });
+
+  records.forEach(r => {
+    const id = String(r.OFFICE_ID || "").trim();
+    if (!officeMap[id]) {
+      officeMap[id] = {
+        officeId: id,
+        officeName: String(r.OFFICE_NAME || getAuthoritativeOfficeName(id, "")),
+        todayReceived: 0,
+        delivered: 0,
+        pending: 0,
+        torn: 0,
+        withoutAddress: 0,
+        tornOrWithoutAddress: 0,
+        invalidMobile: 0,
+        incompleteSets: 0,
+        completeSets: 0,
+        reported: false
+      };
+    }
+    const o = officeMap[id];
+    o.reported = true;
+    o.todayReceived += Number(r.KITS_CAME_TODAY) || 0;
+    o.delivered += Number(r.KITS_DELIVERED) || 0;
+    o.pending += Number(r.TOTAL_PENDING) || 0;
+    o.torn += Number(r.TORN_CONDITION) || 0;
+    o.withoutAddress += Number(r.ADDRESS_NOT_FOUND) || 0;
+    o.invalidMobile += Number(r.MOBILE_NUMBER_INVALID) || 0;
+    o.incompleteSets += Number(r.KITS_INCOMPLETE) || 0;
+    o.completeSets += Number(r.KITS_COMPLETE) || 0;
+    o.tornOrWithoutAddress = o.torn + o.withoutAddress;
+  });
+
+  const officeWise = Object.values(officeMap).sort((a, b) =>
+    a.officeName.localeCompare(b.officeName)
+  );
+
+  const totals = officeWise.reduce((acc, o) => {
+    acc.todayReceived += o.todayReceived;
+    acc.delivered += o.delivered;
+    acc.pending += o.pending;
+    acc.torn += o.torn;
+    acc.withoutAddress += o.withoutAddress;
+    acc.tornOrWithoutAddress += o.tornOrWithoutAddress;
+    acc.invalidMobile += o.invalidMobile;
+    acc.incompleteSets += o.incompleteSets;
+    acc.completeSets += o.completeSets;
+    return acc;
+  }, {
+    todayReceived: 0, delivered: 0, pending: 0, torn: 0, withoutAddress: 0,
+    tornOrWithoutAddress: 0, invalidMobile: 0, incompleteSets: 0, completeSets: 0
+  });
+
+  return successResponse({
+    date: targetDate,
+    officeWise,
+    totals
   });
 }
 
