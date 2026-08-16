@@ -1,132 +1,64 @@
-const AdminDashboard = (() => {
-  let initialized = false;
-  let timer = null;
+const AdminDashboard=(()=>{let initialized=false;
+function init(){if(initialized)return;initialized=true;const s=Auth.getSession();if(!["ADMIN","DPS"].includes(String(s?.role||"").toUpperCase()))return;const d=document.getElementById("admin-dashboard-date"),b=document.getElementById("admin-dashboard-refresh");if(!d||!b)return;const t=UI.todayISO();d.value=t;d.max=t;b.onclick=()=>load(d.value);d.onchange=()=>load(d.value);load(t);}
+async function load(date){const status=document.getElementById("admin-dashboard-status"),b=document.getElementById("admin-dashboard-refresh");if(b)b.disabled=true;try{const x=await AdminDashboardApi.getUpdateStatus(date);render(x);status.textContent=`Updated ${new Date().toLocaleTimeString()}`;status.className="admin-status admin-status-success"}catch(e){status.textContent=e.message||"Unable to load dashboard.";status.className="admin-status admin-status-error"}finally{if(b)b.disabled=false}}
+function render(d){
+  const n=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=String(v??"")};
+  n("admin-updated-count",d.spmsUpdatedToday||0);
+  n("admin-total-count",d.activeSpms||0);
+  n("admin-pending-count",d.spmsPendingUpdate||0);
+  n("admin-completion-percent",`${Number(d.completionPercentage||0)}%`);
+  n("admin-selected-date",d.date||"—");
+  const bar=document.getElementById("admin-progress-bar");
+  if(bar)bar.style.width=`${Math.max(0,Math.min(100,Number(d.completionPercentage||0)))}%`;
 
-  function init() {
-    if (initialized) return;
-    initialized = true;
+  const o=document.getElementById("admin-office-rows");
+  o.replaceChildren();
+  (d.officeWise||[]).forEach(x=>{
+    const tr=document.createElement("tr");
+    [
+      x.officeName,x.totalSpms,x.updatedSpms,x.pendingSpms,
+      `${Number(x.completionPercentage||0)}%`,
+      x.kitsCameToday??0,x.kitsDelivered??0,x.redirected??0,
+      x.mobileInvalid??0,x.addressNotFound??0,x.torn??0,
+      x.kitsIncomplete??0,x.kitsComplete??0,x.totalPending??0,
+      `${Number(x.deliveryPercentage||0).toFixed(1)}%`
+    ].forEach(v=>{
+      const td=document.createElement("td");
+      td.textContent=String(v);
+      tr.appendChild(td);
+    });
+    o.appendChild(tr);
+  });
+  if(!o.children.length)o.innerHTML='<tr><td colspan="16">No active SPM offices found.</td></tr>';
 
-    const session = Auth.getSession();
-    const role = String((session && session.role) || "").toUpperCase();
-    if (!["ADMIN", "DPS"].includes(role)) return;
+  const p=document.getElementById("admin-pending-rows");
+  p.replaceChildren();
+  (d.pendingSpms||[]).forEach((x,i)=>{
+    const tr=document.createElement("tr");
+    [i+1,x.spmName,x.spmId,x.officeName,"Not updated"].forEach(v=>{
+      const td=document.createElement("td");td.textContent=String(v||"—");tr.appendChild(td);
+    });
+    p.appendChild(tr);
+  });
+  if(!p.children.length)p.innerHTML='<tr><td colspan="5">All active SPMs have updated.</td></tr>';
 
-    const date = document.getElementById("admin-dashboard-date");
-    const refresh = document.getElementById("admin-dashboard-refresh");
-    if (!date || !refresh) return;
-
-    const today = typeof UI.todayISO === "function"
-      ? UI.todayISO()
-      : new Date().toISOString().slice(0, 10);
-
-    date.value = today;
-    date.max = today;
-    refresh.addEventListener("click", () => load(date.value));
-    date.addEventListener("change", () => load(date.value));
-
-    load(today);
-    timer = setInterval(() => {
-      if (document.visibilityState === "visible") load(date.value, true);
-    }, 300000);
-  }
-
-  async function load(date, silent = false) {
-    const status = document.getElementById("admin-dashboard-status");
-    const button = document.getElementById("admin-dashboard-refresh");
-
-    if (!silent && button) {
-      button.disabled = true;
-      button.textContent = "Refreshing…";
-    }
-    if (status) {
-      status.textContent = "Loading…";
-      status.className = "admin-status admin-status-loading";
-    }
-
-    try {
-      const data = await AdminDashboardApi.getUpdateStatus(date);
-      render(data);
-      if (status) {
-        status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
-        status.className = "admin-status admin-status-success";
-      }
-    } catch (e) {
-      console.error("Admin dashboard:", e);
-      if (status) {
-        status.textContent = e.message || "Unable to load dashboard.";
-        status.className = "admin-status admin-status-error";
-      }
-    } finally {
-      if (!silent && button) {
-        button.disabled = false;
-        button.textContent = "Refresh";
-      }
-    }
-  }
-
-  function render(data) {
-    const updated = Number(data.spmsUpdatedToday || 0);
-    const total = Number(data.activeSpms || 0);
-    const pending = Number(data.spmsPendingUpdate || 0);
-    const pct = Number(data.completionPercentage || 0);
-
-    setText("admin-updated-count", updated);
-    setText("admin-total-count", total);
-    setText("admin-pending-count", pending);
-    setText("admin-completion-percent", `${pct}%`);
-    setText("admin-selected-date", data.date || "—");
-
-    const bar = document.getElementById("admin-progress-bar");
-    if (bar) {
-      bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-      bar.setAttribute("aria-valuenow", String(pct));
-    }
-
-    const officeRows = document.getElementById("admin-office-rows");
-    if (officeRows) {
-      officeRows.replaceChildren();
-      (data.officeWise || []).forEach(o => {
-        const tr = document.createElement("tr");
-        [
-          o.officeName || "Unassigned",
-          o.totalSpms || 0,
-          o.updatedSpms || 0,
-          o.pendingSpms || 0,
-          `${Number(o.completionPercentage || 0)}%`
-        ].forEach(v => {
-          const td = document.createElement("td");
-          td.textContent = String(v);
-          tr.appendChild(td);
-        });
-        officeRows.appendChild(tr);
+  const detailed=document.getElementById("admin-detailed-rows");
+  if(detailed){
+    detailed.replaceChildren();
+    (d.detailedSpmData||[]).forEach((x,i)=>{
+      const tr=document.createElement("tr");
+      [
+        i+1,x.officeName,x.spmName,x.spmId,x.status,
+        x.kitsCameToday??0,x.kitsDelivered??0,x.redirected??0,
+        x.mobileInvalid??0,x.addressNotFound??0,x.torn??0,
+        x.kitsIncomplete??0,x.kitsComplete??0,x.totalPending??0,
+        `${Number(x.deliveryPercentage||0).toFixed(1)}%`
+      ].forEach(v=>{
+        const td=document.createElement("td");td.textContent=String(v??"—");tr.appendChild(td);
       });
-      if (!officeRows.children.length) {
-        officeRows.innerHTML = '<tr><td colspan="5" class="admin-empty-cell">No active SPM offices found.</td></tr>';
-      }
-    }
-
-    const pendingRows = document.getElementById("admin-pending-rows");
-    if (pendingRows) {
-      pendingRows.replaceChildren();
-      (data.pendingSpms || []).forEach((spm, i) => {
-        const tr = document.createElement("tr");
-        [i + 1, spm.spmName || "—", spm.spmId || "—", spm.officeName || "Unassigned", "Not updated"]
-          .forEach(v => {
-            const td = document.createElement("td");
-            td.textContent = String(v);
-            tr.appendChild(td);
-          });
-        pendingRows.appendChild(tr);
-      });
-      if (!pendingRows.children.length) {
-        pendingRows.innerHTML = '<tr><td colspan="5" class="admin-empty-cell">All active SPMs have updated.</td></tr>';
-      }
-    }
+      detailed.appendChild(tr);
+    });
+    if(!detailed.children.length)detailed.innerHTML='<tr><td colspan="15">No records found for the selected date.</td></tr>';
   }
-
-  function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = String(value);
-  }
-
-  return { init, load };
-})();
+}
+return{init,load};})();

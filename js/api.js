@@ -1,64 +1,29 @@
-/**
- * api.js replacement for V5.0.4
- * Adds the two SPM current-day endpoints directly to Api.
- */
 const Api = (() => {
-  async function get(action, params = {}) {
-    if (!CONFIG.API_URL) throw new Error("CONFIG.API_URL is not configured.");
-    const url = new URL(CONFIG.API_URL);
-    url.searchParams.set("action", action);
-    const session = Auth.getSession();
-    if (session) params = { ...params, session: JSON.stringify(session) };
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
-    });
-    const res = await fetch(url.toString(), { method:"GET", cache:"no-store" });
-    return parseResponse(res);
-  }
-
-  async function post(action, payload = {}) {
-    if (!CONFIG.API_URL) throw new Error("CONFIG.API_URL is not configured.");
-    const body = { action, ...payload };
-    if (action !== "login" && !body.session) {
-      const session = Auth.getSession();
-      if (session) body.session = session;
+  async function request(method, action, payload={}){
+    if(!CONFIG.API_URL)throw new Error("CONFIG.API_URL is not configured.");
+    const session=Auth.getSession();
+    if(method==="GET"){
+      const u=new URL(CONFIG.API_URL);u.searchParams.set("action",action);
+      const data={...payload};if(session)data.session=JSON.stringify(session);
+      Object.entries(data).forEach(([k,v])=>{if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));});
+      return parse(await fetch(u,{cache:"no-store"}));
     }
-    const res = await fetch(CONFIG.API_URL, {
-      method:"POST",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify(body),
-      cache:"no-store"
-    });
-    return parseResponse(res);
+    const body={action,...payload};
+    if(action!=="login"&&!body.session&&session)body.session=session;
+    return parse(await fetch(CONFIG.API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body),cache:"no-store"}));
   }
-
-  async function parseResponse(res) {
-    const text = await res.text();
-    let body;
-    try { body = JSON.parse(text); }
-    catch(e) { throw new Error("Server returned a non-JSON response (HTTP " + res.status + "). Check Apps Script deployment."); }
-    if (!body || typeof body.success === "undefined") throw new Error("Malformed server response from Apps Script.");
-    return body;
-  }
-
-  const getOfficeList = () => get("getOfficeList");
-  const getUser = userId => get("getUser", { userId });
-  const getPreviousDay = (officeId, date) => get("getPreviousDay", { officeId, date });
-  const getHistory = (officeId, from, to) => get("getHistory", { officeId, from, to });
-  const getDashboardData = params => get("getDashboardData", params || {});
-  const getAdminTodayUpdateStatus = date => get("getAdminTodayUpdateStatus", { date });
-  const getOwnTodayRecord = () => get("getOwnTodayRecord");
-  const deleteOwnTodayRecord = (recordId) => post("deleteOwnTodayRecord", { recordId });
-
-  const submitDailyRecord = (record, session) => post("submitDailyRecord", { record, session });
-  const syncOfflineRecord = (record, session) => post("syncOfflineRecord", { record, session });
-  const updateDailyRecord = (record, session) => post("updateDailyRecord", { record, session });
-  const login = (userId, mobile) => post("login", { userId, mobile });
-  const logout = session => post("logout", { session });
-
+  async function parse(res){const t=await res.text();let b;try{b=JSON.parse(t)}catch{throw new Error(`Server returned non-JSON response (HTTP ${res.status}).`)}if(typeof b.success==="undefined")throw new Error("Malformed server response.");return b;}
   return {
-    getOfficeList, getUser, getPreviousDay, getHistory, getDashboardData,
-    getAdminTodayUpdateStatus, getOwnTodayRecord, deleteOwnTodayRecord,
-    submitDailyRecord, syncOfflineRecord, updateDailyRecord, login, logout, get, post
+    login:(u,m)=>request("POST","login",{userId:u,mobile:m}),
+    logout:s=>request("POST","logout",{session:s}),
+    getUser:u=>request("GET","getUser",{userId:u}),
+    getOfficeList:()=>request("GET","getOfficeList"),
+    getPreviousDay:(o,d)=>request("GET","getPreviousDay",{officeId:o,date:d}),
+    getOwnTodayRecord:()=>request("GET","getOwnTodayRecord"),
+    getAdminTodayUpdateStatus:d=>request("GET","getAdminTodayUpdateStatus",{date:d}),
+    submitDailyRecord:(r,s)=>request("POST","submitDailyRecord",{record:r,session:s}),
+    syncOfflineRecord:(r,s)=>request("POST","syncOfflineRecord",{record:r,session:s}),
+    updateDailyRecord:(r,s)=>request("POST","updateDailyRecord",{record:r,session:s}),
+    deleteOwnTodayRecord:id=>request("POST","deleteOwnTodayRecord",{recordId:id})
   };
 })();
