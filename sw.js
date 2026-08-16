@@ -1,14 +1,8 @@
 /**
- * sw.js
- * Caches the app shell so the PWA loads and is usable offline.
- * Data (Google Sheets records) is NOT cached here — that's handled by
- * IndexedDB in storage.js. This worker only caches static assets.
- *
- * Bump CACHE_NAME's version suffix whenever you change any cached file,
- * so returning users get the new version instead of a stale cache.
+ * PMV Toolkit service worker.
+ * Bump the cache version whenever app-shell files change.
  */
-
-const CACHE_NAME = "pmv-toolkit-cache-v1";
+const CACHE_NAME = "pmv-toolkit-cache-v2";
 
 const APP_SHELL = [
   "./",
@@ -30,47 +24,60 @@ const APP_SHELL = [
   "./icons/icon-512.png"
 ];
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
-self.addEventListener("activate", (event) => {
+self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(key => key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
+self.addEventListener("fetch", event => {
+  const request = event.request;
+  const url = new URL(request.url);
 
-  // Never cache API calls to Apps Script — always go to network so data is fresh.
-  // (Offline data entry is handled separately via IndexedDB, not the SW cache.)
+  // Never cache Apps Script API requests.
   if (url.hostname.includes("script.google.com")) {
-    event.respondWith(fetch(event.request).catch(() => new Response(
-      JSON.stringify({ success: false, message: "Offline — request queued locally." }),
-      { headers: { "Content-Type": "application/json" } }
-    )));
+    event.respondWith(fetch(request));
     return;
   }
 
-  // App shell: cache-first, falling back to network, so the app opens instantly
-  // and still works with no connectivity at all.
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === "GET") {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-    })
-  );
+  // Navigation: cached app shell first, then network.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      caches.match("./index.html").then(cached =>
+        cached || fetch(request).catch(() => caches.match("./index.html"))
+      )
+    );
+    return;
+  }
+
+  // Static assets: cache first, then network.
+  if (request.method === "GET") {
+    event.respondWith(
+      caches.match(request).then(cached => {
+        if (cached) return cached;
+
+        return fetch(request).then(response => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
+          return response;
+        });
+      })
+    );
+  }
 });
