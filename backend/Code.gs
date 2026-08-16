@@ -63,6 +63,15 @@ function doGet(e) {
           p.date || todayISO()
         );
         break;
+      case "getOwnTodayRecord":
+        result = getOwnTodayRecord(requireSessionParam(p.session));
+        break;
+      case "deleteOwnTodayRecord":
+        result = deleteOwnTodayRecord(requireSessionParam(p.session), p.recordId || "");
+        break;
+      case "getAdminTodayUpdateStatus":
+        result = getAdminTodayUpdateStatus(requireSessionParam(p.session), p.date || todayISO());
+        break;
       default:
         result = errorResponse("Unknown GET action.");
     }
@@ -662,8 +671,26 @@ function submitDailyRecord(record, session) {
   const rowValues = buildDailyDataRow(normalized, totals, lifecycle, user);
   const sheet = getSheet(SHEETS.DAILY_DATA);
 
+  const existingForSpmDate = findDailyRecordBySpmAndDate(normalized.spmId, normalized.date);
+  if (existingForSpmDate) {
+    return errorResponse(
+      "You have already submitted data for this date. Use Edit or Delete Today's Entry.",
+      [], "DUPLICATE"
+    );
+  }
+
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
+
+  const existingInsideLock = findDailyRecordBySpmAndDate(normalized.spmId, normalized.date);
+  if (existingInsideLock) {
+    lock.releaseLock();
+    return errorResponse(
+      "You have already submitted data for this date. Use Edit or Delete Today's Entry.",
+      [], "DUPLICATE"
+    );
+  }
+
 
   try {
     // Re-check inside the lock to prevent two simultaneous submissions.
