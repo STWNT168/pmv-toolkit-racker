@@ -1,17 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head><link rel="stylesheet" href="css/spm-notification.css">
+<head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <meta name="theme-color" content="#0a3d62">
 <meta name="description" content="PMV Toolkit Management System — Department of Posts">
 <title>PMV Toolkit Tracker</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/admin-dashboard.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<link rel="stylesheet" href="css/spm-notification.css">
 </head>
 <body>
 <div id="toast-container" class="toast-container"></div>
@@ -19,66 +18,100 @@
 
 <section id="view-login" class="view">
   <div class="login-card">
-    <div class="brand-mark">
-      <div class="brand-icon">✉</div>
-      <div><h1>PMV Toolkit Tracker</h1><p class="brand-sub">Department of Posts · Udhampur Division</p></div>
-    </div>
-    <form id="login-form" class="login-form">
-      <div class="field-group"><label for="login-user-id">User ID</label><input type="text" id="login-user-id" placeholder="e.g. SPM101" required autocomplete="username"></div>
-      <div class="field-group"><label for="login-mobile">Registered Mobile Number</label><input type="tel" id="login-mobile" placeholder="10-digit mobile number" required pattern="[0-9]{10}" autocomplete="tel"></div>
-      <button type="submit" id="login-submit" class="btn btn-primary btn-block">SIGN IN</button>
+    <h1>PMV Toolkit Tracker</h1>
+    <p class="brand-sub">Department of Posts · Udhampur Division</p>
+    <form id="login-form">
+      <label>User ID<input id="login-user-id" required autocomplete="username"></label>
+      <label>Registered Mobile Number<input id="login-mobile" type="tel" inputmode="numeric" pattern="[0-9]{10}" required></label>
+      <button id="login-submit" class="btn btn-primary" type="submit">SIGN IN</button>
     </form>
-    <p class="login-footnote">Access is restricted to authorized SPM / DPS / Admin users of Udhampur Division.</p>
+    <p class="login-footnote">Access is restricted to authorized SPM / DPS / Admin users.</p>
   </div>
 </section>
 
 <section id="view-app" class="view hidden">
 <header id="app-shell" class="app-header hidden">
-  <div class="app-header-top"><div class="app-title"><span class="app-title-icon">✉</span><span>PMV Toolkit Tracker</span></div><div id="connectivity-badge" class="connectivity-badge online">Online</div></div>
+  <div class="app-header-top"><strong>✉ PMV Toolkit Tracker</strong><span id="connectivity-badge">Online</span></div>
   <div class="app-header-bottom">
-    <div class="user-chip"><span id="nav-user-name">—</span><span id="nav-user-role" class="role-pill">—</span></div>
-    <nav class="app-nav"><button id="nav-btn-entry" class="nav-btn hidden">Daily Entry</button><button id="nav-btn-dashboard" class="nav-btn hidden">Dashboard</button><button id="nav-logout" class="nav-btn nav-btn-logout">Logout</button></nav>
+    <div><span id="nav-user-name">—</span> <span id="nav-user-role" class="role-pill">—</span></div>
+    <nav>
+      <button id="nav-btn-entry" class="nav-btn hidden">Daily Entry</button>
+      <button id="nav-btn-dashboard" class="nav-btn hidden">Dashboard</button>
+      <button id="nav-logout" class="nav-btn">Logout</button>
+    </nav>
   </div>
 </header>
 
 <main id="screen-entry" class="screen hidden">
-<form id="spm-form" class="form-shell" onsubmit="return false;">
-<div class="card"><h2 class="card-title">Daily Delivery Update</h2><div class="field-row">
-<div class="field-group"><label for="spm-date">Date</label><input type="date" id="spm-date" required></div>
-<div class="field-group"><label for="spm-office">Office</label><select id="spm-office" required><option value="">Select Office</option></select></div>
-</div><input type="hidden" id="spm-prev-pending-hidden" value="0"></div>
-<div class="card card-muted"><h3 class="card-subtitle">Previous Day <span id="prev-date-label" class="muted"></span></h3><div class="prev-day-grid">
-<div><span class="stat-label">Came</span><span id="prev-came" class="stat-value">—</span></div><div><span class="stat-label">Delivered</span><span id="prev-delivered" class="stat-value">—</span></div><div><span class="stat-label">Redirected</span><span id="prev-redirected" class="stat-value">—</span></div><div><span class="stat-label">Pending</span><span id="prev-pending" class="stat-value">—</span></div></div></div>
-<div class="card"><h3 class="card-subtitle">Today's Delivery</h3>
-<div class="field-group"><label for="kits-came">Kits Came Today</label><input type="number" id="kits-came" min="0" placeholder="0" required></div>
-<div class="field-group"><label for="kits-delivered">Kits Delivered</label><input type="number" id="kits-delivered" min="0" placeholder="0"></div>
-<div class="field-group"><label for="redirected">Redirected</label><input type="number" id="redirected" min="0" placeholder="0"></div></div>
-<div class="card"><h3 class="card-subtitle">Pending</h3>
-<div class="field-group"><label for="mobile-invalid">Mobile Number Invalid</label><input type="number" id="mobile-invalid" min="0" placeholder="0"></div>
-<div class="field-group"><label for="address-not-found">Address Not Found</label><input type="number" id="address-not-found" min="0" placeholder="0"></div>
-<div class="field-group"><label for="torn-condition">Torn Condition</label><input type="number" id="torn-condition" min="0" placeholder="0"></div></div>
-<div class="card"><div class="card-title-row"><h3 class="card-subtitle">Incomplete Set</h3><span class="badge-total">Total: <span id="total-incomplete">0</span></span></div><div id="incomplete-rows"></div><button type="button" id="add-incomplete-set" class="btn btn-outline btn-block">+ Add Set</button></div>
-<div class="card"><div class="card-title-row"><h3 class="card-subtitle">Complete Set Pending</h3><span class="badge-total">Total: <span id="total-complete">0</span></span></div><div id="complete-rows"></div><button type="button" id="add-complete-set" class="btn btn-outline btn-block">+ Add Set</button></div>
-<ul id="form-errors" class="form-errors hidden"></ul><p id="sum-warning" class="sum-warning hidden"></p>
-<div class="card summary-card"><div class="summary-row"><span>TOTAL PENDING</span><b id="total-pending">0</b></div><div class="summary-row"><span>DELIVERY %</span><b id="delivery-percent">0.0%</b></div></div>
-<div class="action-row"><button type="button" id="btn-save-draft" class="btn btn-secondary btn-block">SAVE DRAFT</button><button type="button" id="btn-submit" class="btn btn-primary btn-block">SUBMIT</button></div>
-<div class="sync-status-row"><span id="sync-status" class="sync-badge">—</span></div>
+<form id="spm-form" class="form-shell" onsubmit="return false">
+  <div class="card"><h2>Daily Delivery Update</h2>
+    <div class="field-row">
+      <label>Date<input type="date" id="spm-date" required></label>
+      <label>Office<select id="spm-office" required><option value="">Select Office</option></select></label>
+    </div>
+  </div>
+  <div class="card card-muted"><h3>Previous Day <span id="prev-date-label"></span></h3>
+    <div class="prev-day-grid">
+      <div>Came <b id="prev-came">—</b></div><div>Delivered <b id="prev-delivered">—</b></div>
+      <div>Redirected <b id="prev-redirected">—</b></div><div>Pending <b id="prev-pending">—</b></div>
+    </div>
+  </div>
+  <div class="card"><h3>Today's Delivery</h3>
+    <label>Kits Came Today<input type="number" id="kits-came" min="0" required></label>
+    <label>Kits Delivered<input type="number" id="kits-delivered" min="0" value="0"></label>
+    <label>Redirected<input type="number" id="redirected" min="0" value="0"></label>
+  </div>
+  <div class="card"><h3>Pending</h3>
+    <label>Mobile Number Invalid<input type="number" id="mobile-invalid" min="0" value="0"></label>
+    <label>Address Not Found<input type="number" id="address-not-found" min="0" value="0"></label>
+    <label>Torn Condition<input type="number" id="torn-condition" min="0" value="0"></label>
+  </div>
+  <div class="card"><h3>Incomplete Set <span>Total: <b id="total-incomplete">0</b></span></h3>
+    <div id="incomplete-rows"></div><button type="button" id="add-incomplete-set" class="btn btn-outline">+ Add Set</button>
+  </div>
+  <div class="card"><h3>Complete Set Pending <span>Total: <b id="total-complete">0</b></span></h3>
+    <div id="complete-rows"></div><button type="button" id="add-complete-set" class="btn btn-outline">+ Add Set</button>
+  </div>
+  <div id="spm-update-notification"></div>
+  <div class="card summary-card"><div>TOTAL PENDING <b id="total-pending">0</b></div><div>DELIVERY % <b id="delivery-percent">0.0%</b></div></div>
+  <div class="action-row"><button type="button" id="btn-save-draft" class="btn btn-secondary">SAVE DRAFT</button><button type="button" id="btn-submit" class="btn btn-primary">SUBMIT</button></div>
 </form>
 </main>
 
 <main id="screen-dashboard" class="screen hidden">
-<div id="admin-dashboard-root" class="admin-dashboard">
-<header class="admin-dashboard-header"><div><p class="admin-eyebrow">PMV TOOLKIT</p><h1>Daily SPM Update Monitor</h1><p class="admin-subtitle">Monitoring date: <strong id="admin-selected-date">—</strong></p></div>
-<div class="admin-dashboard-actions"><label for="admin-dashboard-date">Date</label><input id="admin-dashboard-date" type="date"><button id="admin-dashboard-refresh" type="button">Refresh</button></div></header>
-<div id="admin-dashboard-status" class="admin-status admin-status-loading">Loading…</div>
+<div class="admin-dashboard">
+<header class="admin-dashboard-header">
+  <div><p class="admin-eyebrow">PMV TOOLKIT</p><h1>Daily SPM Update Monitor</h1><p>Monitoring date: <strong id="admin-selected-date">—</strong></p></div>
+  <div><label>Date<input id="admin-dashboard-date" type="date"></label><button id="admin-dashboard-refresh" type="button">Refresh</button></div>
+</header>
+<div id="admin-dashboard-status" class="admin-status">Loading…</div>
 <section class="admin-kpi-grid">
-<article class="admin-kpi"><span class="admin-kpi-label">SPMs Updated Today</span><strong id="admin-updated-count">0</strong><small>submitted a daily update</small></article>
-<article class="admin-kpi"><span class="admin-kpi-label">Active SPMs</span><strong id="admin-total-count">0</strong><small>active SPM accounts</small></article>
-<article class="admin-kpi"><span class="admin-kpi-label">Pending Updates</span><strong id="admin-pending-count">0</strong><small>SPMs not updated</small></article>
-<article class="admin-kpi"><span class="admin-kpi-label">Completion</span><strong id="admin-completion-percent">0%</strong><div class="admin-progress-track"><div id="admin-progress-bar" class="admin-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div></article>
+  <article><span>SPMs Updated Today</span><strong id="admin-updated-count">0</strong></article>
+  <article><span>Active SPMs</span><strong id="admin-total-count">0</strong></article>
+  <article><span>Pending Updates</span><strong id="admin-pending-count">0</strong></article>
+  <article><span>Completion</span><strong id="admin-completion-percent">0%</strong><div class="admin-progress-track"><div id="admin-progress-bar" class="admin-progress-bar"></div></div></article>
 </section>
-<section class="admin-panel"><div class="admin-panel-header"><h2>Office-wise Pending Updates</h2><p>Compare submission progress across offices.</p></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Office</th><th>Total SPMs</th><th>Updated</th><th>Pending</th><th>Completion</th></tr></thead><tbody id="admin-office-rows"></tbody></table></div></section>
-<section class="admin-panel"><div class="admin-panel-header"><h2>SPMs Who Have Not Updated</h2><p>Follow up with these officials for the selected date.</p></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th><th>Status</th></tr></thead><tbody id="admin-pending-rows"></tbody></table></div></section>
+<section class="admin-panel"><h2>Office-wise Pending Updates</h2>
+<table class="admin-table"><thead><tr><th>Office</th><th>Total SPMs</th><th>Updated</th><th>Pending</th><th>Completion</th>
+<th>Kits Came</th><th>Delivered</th><th>Redirected</th><th>Mobile Invalid</th>
+<th>Address Not Found</th><th>Torn</th><th>Incomplete Kits</th><th>Complete Kits</th>
+<th>Total Pending</th><th>Delivery %</th></tr></thead><tbody id="admin-office-rows"></tbody></table></section>
+<section class="admin-panel">
+<h2>Consolidated Kits & Daily Field Report</h2>
+<div class="table-scroll">
+<table class="admin-table admin-detailed-table">
+<thead><tr>
+<th>#</th><th>Office</th><th>SPM Name</th><th>SPM ID</th><th>Status</th>
+<th>Kits Came</th><th>Delivered</th><th>Redirected</th>
+<th>Mobile Invalid</th><th>Address Not Found</th><th>Torn</th>
+<th>Incomplete Kits</th><th>Complete Kits</th><th>Total Pending</th><th>Delivery %</th>
+</tr></thead>
+<tbody id="admin-detailed-rows"></tbody>
+</table>
+</div>
+</section>
+<section class="admin-panel"><h2>SPMs Who Have Not Updated</h2>
+<table class="admin-table"><thead><tr><th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th><th>Status</th></tr></thead><tbody id="admin-pending-rows"></tbody></table></section>
 </div>
 </main>
 </section>
@@ -92,11 +125,8 @@
 <script src="js/sync.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/spm.js"></script>
-<script src="js/dashboard.js"></script>
 <script src="js/admin-dashboard-api.js"></script>
 <script src="js/admin-dashboard.js"></script>
 <script src="js/app.js"></script>
-  
-
-
-</body></html>
+</body>
+</html>
