@@ -31,6 +31,14 @@ const ROLES = Object.freeze({
 
 const SESSION_DAYS = 7;
 
+// V3 security controls
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCKOUT_SECONDS = 15 * 60;
+const MAX_REQUEST_BYTES = 100000;
+const MAX_RECORD_ID_LENGTH = 120;
+const MAX_SET_ROWS = 100;
+const SESSION_TOUCH_MINUTES = 10;
+
 // ==================== ENTRY POINTS ====================
 
 function doGet(e) {
@@ -55,6 +63,15 @@ function doGet(e) {
       case "getDashboardData":
         result = getDashboardData(p, requireSessionParam(p.session));
         break;
+      case "getSecurityStatus":
+        result = getSecurityStatus(requireSessionParam(p.session));
+        break;
+      case "getAdminTodayUpdateStatus":
+        result = getAdminTodayUpdateStatus(
+          requireSessionParam(p.session),
+          p.date || todayISO()
+        );
+        break;
       default:
         result = errorResponse("Unknown GET action.");
     }
@@ -67,7 +84,11 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    const rawBody = (e && e.postData && e.postData.contents) || "";
+    if (rawBody.length > MAX_REQUEST_BYTES) {
+      throw new Error("Request is too large.");
+    }
+    const body = JSON.parse(rawBody || "{}");
     const action = body.action;
     let result;
 
@@ -87,6 +108,9 @@ function doPost(e) {
       case "updateDailyRecord":
         result = updateDailyRecord(body.record, body.session);
         break;
+      case "revokeAllSessions":
+        result = revokeAllSessions(body.session);
+        break;
       default:
         result = errorResponse("Unknown POST action.");
     }
@@ -101,60 +125,105 @@ function doPost(e) {
 
 function login(userId, mobile) {
   userId = String(userId || "").trim();
-  mobile = String(mobile || "").trim();
+  mobile = normalizeMobile(mobile);
 
   if (!userId || !mobile) return errorResponse("User ID and mobile number are required.");
 
-  const user = findUserById(userId);
-  if (!user) return errorResponse("User not found.");
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
 
-  if (String(user.MOBILE || "").trim() !== mobile) {
-    return errorResponse("Mobile number does not match our records.");
+  try {
+    const rateKey = "login:" + userId.toUpperCase();
+    const failures = Number(CacheService.getScriptCache().get(rateKey) || 0);
+
+    if (failures >= LOGIN_MAX_FAILURES) {
+      logSecurityEvent(userId, "LOGIN_BLOCKED", "Too many failed login attempts.");
+      return errorResponse("Too many failed login attempts. Please try again later.");
+    }
+
+    const user = findUserById(userId);
+    if (!user) {
+      registerLoginFailure(rateKey);
+      return errorResponse("Invalid User ID or mobile number.");
+    }
+
+    if (!isActive(user.ACTIVE)) {
+      registerLoginFailure(rateKey);
+      return errorResponse("Invalid User ID or mobile number.");
+    }
+
+    if (normalizeMobile(user.MOBILE) !== mobile) {
+      registerLoginFailure(rateKey);
+      return errorResponse("Invalid User ID or mobile number.");
+    }
+
+    const role = normalizeRole(user.ROLE);
+    if (!role) return errorResponse("Invalid role configured for this user.");
+
+    // Successful login clears the temporary failure counter and revokes
+    // previously active sessions for the same user.
+    CacheService.getScriptCache().remove(rateKey);
+    revokeUserSessions(user.USER_ID);
+
+    const token = Utilities.getUuid() + "-" + Utilities.getUuid();
+    const now = new Date();
+    const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+
+    const sheet = getSheet(SHEETS.SESSIONS);
+    sheet.appendRow([token, user.USER_ID, now, expires, true]);
+
+    logAudit({
+      userId: user.USER_ID,
+      userName: user.NAME,
+      role: role,
+      action: "LOGIN",
+      recordId: "",
+      officeId: user.OFFICE_ID,
+      date: "",
+      oldValue: "",
+      newValue: "",
+      requestInfo: "V3",
+      result: "SUCCESS"
+    });
+
+    return successResponse({
+      userId: user.USER_ID,
+      name: user.NAME,
+      role: role,
+      officeId: user.OFFICE_ID,
+      officeName: getAuthoritativeOfficeName(user.OFFICE_ID, user.OFFICE_NAME),
+      token: token,
+      expiresAt: expires.toISOString()
+    }, "Login successful.");
+  } finally {
+    lock.releaseLock();
   }
+}
 
-  if (!isActive(user.ACTIVE)) {
-    return errorResponse("This account is inactive. Contact your Admin.");
+function normalizeMobile(value) {
+  return String(value || "").replace(/\\D/g, "");
+}
+
+function registerLoginFailure(rateKey) {
+  const cache = CacheService.getScriptCache();
+  const current = Number(cache.get(rateKey) || 0) + 1;
+  cache.put(rateKey, String(current), LOGIN_LOCKOUT_SECONDS);
+
+  if (current >= LOGIN_MAX_FAILURES) {
+    logSecurityEvent(rateKey.replace(/^login:/, ""), "LOGIN_LOCKOUT", "Login temporarily blocked.");
   }
+}
 
-  const role = normalizeRole(user.ROLE);
-  if (!role) return errorResponse("Invalid role configured for this user.");
-
-  const token = Utilities.getUuid() + "-" + Utilities.getUuid();
-  const now = new Date();
-  const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-
+function revokeUserSessions(userId) {
   const sheet = getSheet(SHEETS.SESSIONS);
-  sheet.appendRow([
-    token,
-    user.USER_ID,
-    now,
-    expires,
-    true
-  ]);
+  const rows = sheet.getDataRange().getValues();
+  const wanted = String(userId || "").trim();
 
-  logAudit({
-    userId: user.USER_ID,
-    userName: user.NAME,
-    role: role,
-    action: "LOGIN",
-    recordId: "",
-    officeId: user.OFFICE_ID,
-    date: "",
-    oldValue: "",
-    newValue: "",
-    requestInfo: "",
-    result: "SUCCESS"
-  });
-
-  return successResponse({
-    userId: user.USER_ID,
-    name: user.NAME,
-    role: role,
-    officeId: user.OFFICE_ID,
-    officeName: getAuthoritativeOfficeName(user.OFFICE_ID, user.OFFICE_NAME),
-    token: token,
-    expiresAt: expires.toISOString()
-  }, "Login successful.");
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || "").trim() === wanted && isActive(rows[i][4])) {
+      sheet.getRange(i + 1, 5).setValue(false);
+    }
+  }
 }
 
 function logout(session) {
@@ -191,6 +260,32 @@ function logout(session) {
   }
 }
 
+function logSecurityEvent(userId, action, details) {
+  try {
+    logAudit({
+      userId: String(userId || ""),
+      userName: "",
+      role: "",
+      action: action,
+      recordId: "",
+      officeId: "",
+      date: "",
+      oldValue: "",
+      newValue: "",
+      requestInfo: String(details || "").slice(0, 500),
+      result: "SECURITY"
+    });
+  } catch (e) {
+    console.error("Security audit failed:", e);
+  }
+}
+
+function assertRequestObject(value, name) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error((name || "Request") + " is invalid.");
+  }
+}
+
 function requireSessionParam(raw) {
   if (!raw) throw new Error("Not authenticated.");
   let session;
@@ -214,7 +309,7 @@ function authorize(session) {
   const sessionRow = findSession(token);
   if (!sessionRow) throw new Error("Session expired or invalid.");
 
-  if (String(sessionRow.USER_ID).trim() !== userId) {
+  if (String(sessionRow.USER_ID || "").trim() !== userId) {
     throw new Error("Invalid session.");
   }
 
@@ -222,15 +317,21 @@ function authorize(session) {
     throw new Error("Session is inactive.");
   }
 
-  const expires = new Date(sessionRow.EXPIRES_AT);
-  if (isNaN(expires.getTime()) || expires.getTime() <= Date.now()) {
+  const expires = parseSheetDate(sessionRow.EXPIRES_AT);
+  if (!expires || expires.getTime() <= Date.now()) {
     invalidateToken(token);
     throw new Error("Session expired. Please log in again.");
   }
 
   const user = findUserById(userId);
-  if (!user) throw new Error("Session user no longer exists.");
-  if (!isActive(user.ACTIVE)) throw new Error("Account is inactive.");
+  if (!user) {
+    logSecurityEvent(userId, "AUTH_FAILED", "Session user no longer exists.");
+    throw new Error("Session user no longer exists.");
+  }
+  if (!isActive(user.ACTIVE)) {
+    logSecurityEvent(userId, "AUTH_FAILED", "Inactive account attempted access.");
+    throw new Error("Account is inactive.");
+  }
 
   const role = normalizeRole(user.ROLE);
   if (!role) throw new Error("Invalid role configured for this user.");
@@ -242,9 +343,48 @@ function authorize(session) {
   };
 }
 
+function parseSheetDate(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
+
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  // Handles ISO strings, normal date strings, and numeric timestamps.
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    const d = new Date(n);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function findSession(token) {
-  const rows = readSheetAsObjects(SHEETS.SESSIONS);
-  return rows.find(r => String(r.TOKEN || "").trim() === String(token).trim()) || null;
+  const sheet = getSheet(SHEETS.SESSIONS);
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return null;
+
+  const wanted = String(token || "").trim();
+  if (!wanted) return null;
+
+  // Use the defined SESSIONS column positions rather than relying on
+  // header spelling/capitalization in an older spreadsheet.
+  for (let i = 1; i < values.length; i++) {
+    const rowToken = String(values[i][0] || "").trim();
+    if (rowToken !== wanted) continue;
+
+    return {
+      __row: i + 1,
+      TOKEN: rowToken,
+      USER_ID: String(values[i][1] || "").trim(),
+      CREATED_AT: values[i][2],
+      EXPIRES_AT: values[i][3],
+      ACTIVE: values[i][4]
+    };
+  }
+
+  return null;
 }
 
 function invalidateToken(token) {
@@ -265,18 +405,26 @@ function cleanupExpiredSessions() {
   const now = Date.now();
 
   for (let i = 1; i < rows.length; i++) {
-    const expires = new Date(rows[i][3]).getTime();
-    if (expires && expires <= now) sheet.getRange(i + 1, 5).setValue(false);
+    const expires = parseSheetDate(rows[i][3]);
+    if (expires && expires.getTime() <= now) {
+      sheet.getRange(i + 1, 5).setValue(false);
+    }
   }
 }
 
 // ==================== MASTER DATA ====================
 
 function getOfficeList(session) {
-  authorize(session);
+  const auth = authorize(session);
 
   const rows = readSheetAsObjects(SHEETS.OFFICE_MASTER);
-  const active = rows.filter(r => isActive(r.ACTIVE));
+  let active = rows.filter(r => isActive(r.ACTIVE));
+
+  // Least privilege: an SPM only receives their own office.
+  if (auth.role === ROLES.SPM) {
+    const ownOfficeId = String(auth.user.OFFICE_ID || "").trim();
+    active = active.filter(r => String(r.OFFICE_ID || "").trim() === ownOfficeId);
+  }
 
   return successResponse(active.map(r => ({
     officeId: String(r.OFFICE_ID || "").trim(),
@@ -334,6 +482,163 @@ function normalizeRole(role) {
 
 function isActive(value) {
   return value === true || String(value).trim().toUpperCase() === "TRUE" || String(value).trim() === "1";
+}
+
+
+
+function getAdminTodayUpdateStatus(session, date) {
+  const auth = authorize(session);
+  if (auth.role !== ROLES.ADMIN && auth.role !== ROLES.DPS) {
+    throw new Error("Only Admin/DPS can access update status.");
+  }
+
+  const targetDate = validateDateString(date || todayISO());
+  const records = readSheetAsObjects(SHEETS.DAILY_RECORDS);
+  const users = readSheetAsObjects(SHEETS.USER_MASTER);
+  const offices = readSheetAsObjects(SHEETS.OFFICE_MASTER);
+
+  const activeSpms = users.filter(r =>
+    isActive(r.ACTIVE) && normalizeRole(r.ROLE) === ROLES.SPM
+  );
+
+  const activeOffices = offices.filter(r => isActive(r.ACTIVE));
+  const updatedBySpm = {};
+
+  records.forEach(r => {
+    if (String(r.DATE || "").trim() !== targetDate) return;
+    const spmId = String(r.SPM_ID || "").trim();
+    if (!spmId) return;
+    updatedBySpm[spmId] = true;
+  });
+
+  const updatedSpmIds = new Set(Object.keys(updatedBySpm));
+  const pendingSpms = activeSpms.filter(r =>
+    !updatedSpmIds.has(String(r.USER_ID || "").trim())
+  );
+
+  const officeMap = {};
+  activeOffices.forEach(o => {
+    const id = String(o.OFFICE_ID || "").trim();
+    officeMap[id] = {
+      officeId: id,
+      officeName: String(o.OFFICE_NAME || "").trim(),
+      totalSpms: 0,
+      updatedSpms: 0,
+      pendingSpms: 0
+    };
+  });
+
+  activeSpms.forEach(spm => {
+    const officeId = String(spm.OFFICE_ID || "").trim();
+    if (!officeMap[officeId]) {
+      officeMap[officeId] = {
+        officeId: officeId,
+        officeName: String(spm.OFFICE_NAME || "").trim() || "Unassigned",
+        totalSpms: 0,
+        updatedSpms: 0,
+        pendingSpms: 0
+      };
+    }
+
+    officeMap[officeId].totalSpms++;
+
+    if (updatedSpmIds.has(String(spm.USER_ID || "").trim())) {
+      officeMap[officeId].updatedSpms++;
+    } else {
+      officeMap[officeId].pendingSpms++;
+    }
+  });
+
+  const officeWise = Object.values(officeMap)
+    .map(o => ({
+      ...o,
+      completionPercentage: o.totalSpms
+        ? Number(((o.updatedSpms / o.totalSpms) * 100).toFixed(1))
+        : 0
+    }))
+    .sort((a, b) =>
+      b.pendingSpms - a.pendingSpms ||
+      a.officeName.localeCompare(b.officeName)
+    );
+
+  const pendingList = pendingSpms
+    .map(spm => ({
+      spmId: String(spm.USER_ID || "").trim(),
+      spmName: String(spm.NAME || "").trim(),
+      officeId: String(spm.OFFICE_ID || "").trim(),
+      officeName: String(spm.OFFICE_NAME || "").trim()
+    }))
+    .sort((a, b) =>
+      a.officeName.localeCompare(b.officeName) ||
+      a.spmName.localeCompare(b.spmName)
+    );
+
+  const totalSpms = activeSpms.length;
+  const updatedCount = updatedSpmIds.size;
+  const pendingCount = pendingList.length;
+
+  return successResponse({
+    date: targetDate,
+    spmsUpdatedToday: updatedCount,
+    activeSpms: totalSpms,
+    spmsPendingUpdate: pendingCount,
+    completionPercentage: totalSpms
+      ? Number(((updatedCount / totalSpms) * 100).toFixed(1))
+      : 0,
+    officeWise: officeWise,
+    pendingSpms: pendingList
+  });
+}
+
+function getSecurityStatus(session) {
+  const auth = authorize(session);
+  if (auth.role !== ROLES.ADMIN) throw new Error("Only Admin can access security status.");
+
+  const sessions = readSheetAsObjects(SHEETS.SESSIONS);
+  const now = Date.now();
+  const activeSessions = sessions.filter(r => {
+    const expires = parseSheetDate(r.EXPIRES_AT);
+    return isActive(r.ACTIVE) && expires && expires.getTime() > now;
+  }).length;
+
+  const users = readSheetAsObjects(SHEETS.USER_MASTER);
+  const activeUsers = users.filter(r => isActive(r.ACTIVE)).length;
+
+  const offices = readSheetAsObjects(SHEETS.OFFICE_MASTER);
+  const activeOffices = offices.filter(r => isActive(r.ACTIVE)).length;
+
+  return successResponse({
+    activeSessions: activeSessions,
+    activeUsers: activeUsers,
+    activeOffices: activeOffices,
+    sessionLifetimeDays: SESSION_DAYS,
+    loginMaxFailures: LOGIN_MAX_FAILURES,
+    loginLockoutMinutes: LOGIN_LOCKOUT_SECONDS / 60
+  });
+}
+
+function revokeAllSessions(session) {
+  const auth = authorize(session);
+  if (auth.role !== ROLES.ADMIN) throw new Error("Only Admin can revoke sessions.");
+
+  const sheet = getSheet(SHEETS.SESSIONS);
+  const rows = sheet.getDataRange().getValues();
+  let revoked = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (isActive(rows[i][4])) {
+      sheet.getRange(i + 1, 5).setValue(false);
+      revoked++;
+    }
+  }
+
+  logAudit(auditEntry(auth.user, "REVOKE_ALL_SESSIONS", {
+    id: "SECURITY",
+    officeId: "",
+    date: ""
+  }, "", "SUCCESS"));
+
+  return successResponse({ revoked: revoked }, "All active sessions revoked.");
 }
 
 // ==================== READS ====================
@@ -395,6 +700,13 @@ function getDashboardData(params, session) {
 
   const from = params.from ? validateDateString(params.from) : shiftDate(todayISO(), -7);
   const to = params.to ? validateDateString(params.to) : todayISO();
+
+  const fromDate = new Date(from + "T00:00:00");
+  const toDate = new Date(to + "T00:00:00");
+  const rangeDays = Math.floor((toDate - fromDate) / 86400000) + 1;
+  if (rangeDays < 1 || rangeDays > 366) {
+    throw new Error("Dashboard date range must be between 1 and 366 days.");
+  }
   const officeFilter = String(params.officeId || "").trim();
 
   if (officeFilter) getAuthoritativeOffice(officeFilter);
@@ -612,6 +924,13 @@ function updateDailyRecord(record, session) {
   }
 
   const normalized = normalizeRecord(record);
+
+  if (auth.role === ROLES.SPM &&
+      String(auth.user.OFFICE_ID) !== String(normalized.officeId)) {
+    logSecurityEvent(auth.user.USER_ID, "UPDATE_DENIED", "SPM attempted cross-office edit.");
+    return errorResponse("Not authorized for this office.");
+  }
+
   const office = getAuthoritativeOffice(normalized.officeId);
   normalized.officeName = String(office.OFFICE_NAME || "").trim();
 
@@ -642,7 +961,7 @@ function updateDailyRecord(record, session) {
 function normalizeRecord(record) {
   const r = JSON.parse(JSON.stringify(record || {}));
 
-  r.id = String(r.id || "").trim();
+  r.id = String(r.id || "").trim().slice(0, MAX_RECORD_ID_LENGTH);
   r.date = String(r.date || "").trim();
   r.officeId = String(r.officeId || "").trim();
 
@@ -662,10 +981,11 @@ function normalizeRecord(record) {
     kitsIncomplete: x.kitsIncomplete === "" || x.kitsIncomplete === undefined ? 0 : Number(x.kitsIncomplete)
   })) : [];
 
+  r.incompleteRows = r.incompleteRows.slice(0, MAX_SET_ROWS);
   r.completeRows = Array.isArray(r.completeRows) ? r.completeRows.map(x => ({
     setNumber: x.setNumber === "" || x.setNumber === undefined ? "" : Number(x.setNumber),
     kitsComplete: x.kitsComplete === "" || x.kitsComplete === undefined ? 0 : Number(x.kitsComplete)
-  })) : [];
+  })).slice(0, MAX_SET_ROWS) : [];
 
   return r;
 }
@@ -1075,6 +1395,11 @@ function setupSheets() {
   createSheetIfMissing(ss, SHEETS.SESSIONS, [
     "TOKEN", "USER_ID", "CREATED_AT", "EXPIRES_AT", "ACTIVE"
   ]);
+
+  // Repair an older/mismatched SESSIONS header without deleting session rows.
+  ensureHeaders(ss.getSheetByName(SHEETS.SESSIONS), [
+    "TOKEN", "USER_ID", "CREATED_AT", "EXPIRES_AT", "ACTIVE"
+  ]);
 }
 
 function createSheetIfMissing(ss, name, headers) {
@@ -1088,4 +1413,67 @@ function createSheetIfMissing(ss, name, headers) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.setFrozenRows(1);
   }
+}
+
+function ensureHeaders(sheet, expectedHeaders) {
+  if (!sheet) throw new Error("Sheet is missing.");
+
+  const lastColumn = Math.max(sheet.getLastColumn(), expectedHeaders.length);
+  const current = sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
+    .slice(0, expectedHeaders.length)
+    .map(v => String(v || "").trim().toUpperCase());
+
+  const expected = expectedHeaders.map(h => String(h).trim().toUpperCase());
+  const matches = expected.every((h, i) => current[i] === h);
+
+  if (!matches) {
+    sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
+  }
+
+  sheet.setFrozenRows(1);
+}
+
+/**
+ * Diagnostic helper.
+ * Run this manually in Apps Script after setupSheets().
+ * It does not expose session tokens.
+ */
+function diagnosePmvSetup() {
+  const ss = getSpreadsheet();
+  const required = Object.values(SHEETS);
+  const report = [];
+
+  required.forEach(name => {
+    const sheet = ss.getSheetByName(name);
+    report.push({
+      sheet: name,
+      exists: !!sheet,
+      rows: sheet ? sheet.getLastRow() : 0,
+      columns: sheet ? sheet.getLastColumn() : 0
+    });
+  });
+
+  const officeSheet = ss.getSheetByName(SHEETS.OFFICE_MASTER);
+  const officeRows = officeSheet ? readSheetAsObjects(SHEETS.OFFICE_MASTER) : [];
+  const activeOffices = officeRows.filter(r => isActive(r.ACTIVE)).map(r => ({
+    officeId: String(r.OFFICE_ID || "").trim(),
+    officeName: String(r.OFFICE_NAME || "").trim()
+  }));
+
+  console.log(JSON.stringify({
+    version: "V3",
+    spreadsheetId: SPREADSHEET_ID,
+    sheets: report,
+    activeOfficeCount: activeOffices.length,
+    activeOffices: activeOffices
+  }, null, 2));
+
+  return {
+    success: true,
+    data: {
+      sheets: report,
+      activeOfficeCount: activeOffices.length,
+      activeOffices: activeOffices
+    }
+  };
 }
