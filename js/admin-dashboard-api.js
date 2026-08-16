@@ -6,14 +6,5 @@ const AdminDashboardApi = (() => {
     }
     return response.data || {};
   }
-
-  async function getOfficeWiseReport(date) {
-    const response = await Api.get("getOfficeWiseReport", { date });
-    if (!response || !response.success) {
-      throw new Error((response && response.message) || "Could not load office-wise report.");
-    }
-    return response.data || {};
-  }
-
-  return { getUpdateStatus, getOfficeWiseReport };
+  return { getUpdateStatus };
 })();
