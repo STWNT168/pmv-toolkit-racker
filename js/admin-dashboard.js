@@ -43,8 +43,12 @@ const AdminDashboard = (() => {
     }
 
     try {
-      const data = await AdminDashboardApi.getUpdateStatus(date);
+      const [data, report] = await Promise.all([
+        AdminDashboardApi.getUpdateStatus(date),
+        AdminDashboardApi.getOfficeWiseReport(date)
+      ]);
       render(data);
+      renderReport(report);
       if (status) {
         status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
         status.className = "admin-status admin-status-success";
@@ -104,6 +108,24 @@ const AdminDashboard = (() => {
       }
     }
 
+    const updatedRows = document.getElementById("admin-updated-rows");
+    if (updatedRows) {
+      updatedRows.replaceChildren();
+      (data.updatedSpms || []).forEach((spm, i) => {
+        const tr = document.createElement("tr");
+        [i + 1, spm.spmName || "—", spm.spmId || "—", spm.officeName || "Unassigned", spm.submittedAt || "—"]
+          .forEach(v => {
+            const td = document.createElement("td");
+            td.textContent = String(v);
+            tr.appendChild(td);
+          });
+        updatedRows.appendChild(tr);
+      });
+      if (!updatedRows.children.length) {
+        updatedRows.innerHTML = '<tr><td colspan="5" class="admin-empty-cell">No SPMs have updated for this date yet.</td></tr>';
+      }
+    }
+
     const pendingRows = document.getElementById("admin-pending-rows");
     if (pendingRows) {
       pendingRows.replaceChildren();
@@ -123,10 +145,53 @@ const AdminDashboard = (() => {
     }
   }
 
+  function renderReport(data) {
+    data = data || {};
+    const rows = document.getElementById("admin-report-rows");
+    if (rows) {
+      rows.replaceChildren();
+      (data.officeWise || []).forEach(o => {
+        const tr = document.createElement("tr");
+        if (o.reported === false) tr.classList.add("admin-row-unreported");
+        [
+          o.officeName || "Unassigned",
+          o.todayReceived || 0,
+          o.delivered || 0,
+          o.pending || 0,
+          o.torn || 0,
+          o.withoutAddress || 0,
+          o.tornOrWithoutAddress || 0,
+          o.invalidMobile || 0,
+          o.incompleteSets || 0,
+          o.completeSets || 0
+        ].forEach(v => {
+          const td = document.createElement("td");
+          td.textContent = String(v);
+          tr.appendChild(td);
+        });
+        rows.appendChild(tr);
+      });
+      if (!rows.children.length) {
+        rows.innerHTML = '<tr><td colspan="10" class="admin-empty-cell">No active offices found.</td></tr>';
+      }
+    }
+
+    const totals = data.totals || {};
+    setText("admin-report-total-received", totals.todayReceived || 0);
+    setText("admin-report-total-delivered", totals.delivered || 0);
+    setText("admin-report-total-pending", totals.pending || 0);
+    setText("admin-report-total-torn", totals.torn || 0);
+    setText("admin-report-total-without-address", totals.withoutAddress || 0);
+    setText("admin-report-total-torn-or-without-address", totals.tornOrWithoutAddress || 0);
+    setText("admin-report-total-invalid-mobile", totals.invalidMobile || 0);
+    setText("admin-report-total-incomplete", totals.incompleteSets || 0);
+    setText("admin-report-total-complete", totals.completeSets || 0);
+  }
+
   function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = String(value);
   }
 
-  return { init, load };
+  return { init, load, renderReport };
 })();
