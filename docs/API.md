@@ -1,88 +1,79 @@
-# API Reference — Apps Script Backend
+# PMV Toolkit API
 
-Base URL: your deployed Web App `/exec` URL (see `js/config.js`).
+## Authentication
 
-All responses are JSON in the shape:
+`login` accepts `USER_ID + MOBILE` and creates a server-side session in `SESSIONS`.
 
-```json
-{ "success": true, "message": "...", "data": {} }
-```
-
-or on failure:
-
-```json
-{ "success": false, "message": "...", "errors": [] }
-```
-
-## Authentication model
-
-`login` issues an opaque session token after checking `USER_ID` + `MOBILE`
-against `USER_MASTER`. The frontend stores this session (userId, role,
-officeId, token) and sends it back with every write request as `session`.
-
-**Every write endpoint re-derives the user's role and office from
-`USER_MASTER` on the server (`authorize()` in Code.gs) rather than trusting
-the role/office the client sends.** This is what stops a compromised or
-modified frontend from writing data as a different office or role.
-
-## GET endpoints
-
-| action | params | description |
-|---|---|---|
-| `getOfficeList` | — | Active offices from `OFFICE_MASTER` |
-| `getUser` | `userId` | Basic profile lookup |
-| `getPreviousDay` | `officeId`, `date` | Previous day's record for reference (read-only) |
-| `getHistory` | `officeId`, `from`, `to` | Historical records for one office |
-| `getDashboardData` | `from`, `to`, `officeId` (optional) | KPIs, office-wise, date-wise, weekly trend |
-
-## POST endpoints
-
-| action | body | description |
-|---|---|---|
-| `login` | `{ userId, mobile }` | Authenticates and returns a session |
-| `submitDailyRecord` | `{ record, session }` | Creates a new daily record (rejects duplicates) |
-| `updateDailyRecord` | `{ record, session }` | DPS/Admin-only authorized edit of an existing record |
-| `syncOfflineRecord` | `{ record, session }` | Same as submit; idempotent via `record.id` so retries never duplicate |
-
-### `record` shape
+All subsequent GET and POST operations require:
 
 ```json
 {
-  "id": "2026-08-14_OFF001_1755123456789",
-  "date": "2026-08-14",
-  "officeId": "OFF001",
-  "officeName": "Example SO",
-  "kitsCameToday": 100,
-  "kitsDelivered": 80,
-  "redirected": 5,
-  "mobileInvalid": 2,
-  "addressNotFound": 3,
-  "torn": 1,
-  "incompleteRows": [{ "setNumber": 105, "kitsIncomplete": 4 }],
-  "completeRows": [{ "setNumber": 205, "kitsComplete": 3 }],
-  "previousCurrentPending": 12
+  "userId": "...",
+  "token": "..."
 }
 ```
 
-## Business rules enforced server-side
+The backend verifies the token against `SESSIONS`, checks expiry, then reads role and office from `USER_MASTER`.
 
-These mirror `js/calculations.js` but are re-implemented independently in
-`Code.gs` — the server never trusts client-computed totals:
+The client cannot choose its own role or office permissions.
 
-1. Set numbers are identifiers only; never included in any quantity sum.
-2. `TOTAL_PENDING = mobileInvalid + addressNotFound + torn + kitsIncomplete + kitsComplete`
-3. `DELIVERY_PERCENTAGE = kitsDelivered / kitsCameToday * 100` (0 if came = 0)
-4. `kitsDelivered + redirected + TOTAL_PENDING` must not exceed `kitsCameToday`
-5. `CURRENT_PENDING = PREVIOUS_CURRENT_PENDING + NEW_PENDING - RESOLVED_PENDING`
-   (never a blind carry-forward addition)
-6. One finalized record per `(OFFICE_ID, DATE)` — duplicate submissions are
-   rejected unless explicitly authorized as an edit by DPS/Admin.
+## POST
 
-## Error codes
+### login
 
-| code | meaning |
-|---|---|
-| `DUPLICATE` | A record already exists for this office+date |
+```json
+{
+  "action": "login",
+  "userId": "SPM001",
+  "mobile": "9999999999"
+}
+```
 
-Validation failures return `success: false` with a `message` and an
-`errors` array of every rule that failed (not just the first).
+### submitDailyRecord
+
+Creates a new record. SPM users can only create records for their own office.
+
+### syncOfflineRecord
+
+Same secure create path as `submitDailyRecord`.
+
+If the same `record.id` already exists, the server returns success with `alreadyProcessed: true`.
+
+This prevents duplicate rows when the browser loses the response after a successful write.
+
+### updateDailyRecord
+
+DPS/Admin only.
+
+The record must already exist and must contain its real `id`.
+
+The client cannot set an `_authorizedEdit` flag to bypass security.
+
+### logout
+
+Invalidates the current server session.
+
+## GET
+
+All GET requests require an authenticated `session` query parameter.
+
+- `getOfficeList`
+- `getUser`
+- `getPreviousDay`
+- `getHistory`
+- `getDashboardData`
+
+SPM users are restricted to their own office.
+
+DPS/Admin can access the dashboard.
+
+## Server-side business rules
+
+1. Set numbers are identifiers only.
+2. `TOTAL_PENDING = mobile invalid + address not found + torn + incomplete kits + complete kits`.
+3. `DELIVERY_PERCENTAGE = delivered / came × 100`; zero if came is zero.
+4. `delivered + redirected + total pending <= came`.
+5. Previous pending is read from the previous calendar day's server record.
+6. There is currently no resolved-pending input field, so `RESOLVED_PENDING = 0`.
+7. One record per `(OFFICE_ID, DATE)`.
+8. `DAILY_DATA.ID` is the idempotency key.
