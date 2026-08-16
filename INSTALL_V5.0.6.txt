@@ -1,0 +1,38 @@
+PMV TOOLKIT TRACKER V5.0.6
+
+REPLACEMENT FILES
+- backend/Code.gs
+- js/config.js
+- js/api.js
+- js/spm.js
+- js/admin-dashboard-api.js
+- js/admin-dashboard.js
+- sw.js
+- index.html
+- VERSION
+
+IMPORTANT:
+1. The Google Apps Script backend must be copied into the Apps Script project that serves your Web App.
+2. The backend is configured for Spreadsheet ID:
+   1vEjY1z-147b38XTWV7vRm_9pjXVMfJmjdQtrKRkkLy8
+3. Required live tabs:
+   USER_MASTER
+   OFFICE_MASTER
+   DAILY_DATA
+   SESSIONS
+   (SET_TRACKER/AUDIT_LOG are created by setupSheets if needed.)
+4. DAILY_RECORDS is NOT used by this V5.0.6 backend.
+5. After replacing Code.gs in Apps Script, DEPLOY > MANAGE DEPLOYMENTS > Edit the Web App deployment and create a NEW VERSION.
+6. The GitHub js/config.js must contain the same /exec URL as the updated Apps Script Web App.
+7. Run setupSheets() only if required tabs are missing.
+8. Run cleanupDuplicateDailyData() ONCE to physically remove old duplicate DAILY_DATA rows. It keeps the newest row for each SPM + date.
+9. Do NOT manually run getDashboardData(); the current backend uses getAdminTodayUpdateStatus() through the authenticated website.
+10. Run diagnoseDashboardData() only as a spreadsheet/backend diagnostic.
+
+FEATURES:
+- SPM Office is loaded from USER_MASTER and locked.
+- SPM duplicate submission for the same date is blocked atomically.
+- SPM can delete today's own entry and submit a corrected entry.
+- Historical duplicate DAILY_DATA rows can be cleaned safely.
+- Admin dashboard shows updated SPM count, pending SPM count, completion progress, office-wise figures and detailed SPM status.
+- Dashboard reads DAILY_DATA and logically deduplicates SPM/date records.

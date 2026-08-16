@@ -47,55 +47,91 @@
   <div class="card"><h2>Daily Delivery Update</h2>
     <div class="field-row">
       <label>Date<input type="date" id="spm-date" required></label>
-      <label>Office<select id="spm-office" required><option value="">Select Office</option></select></label>
+      <label>Office<select id="spm-office" required><option value="">Loading Office…</option></select></label>
     </div>
   </div>
+
   <div class="card card-muted"><h3>Previous Day <span id="prev-date-label"></span></h3>
     <div class="prev-day-grid">
-      <div>Came <b id="prev-came">—</b></div><div>Delivered <b id="prev-delivered">—</b></div>
-      <div>Redirected <b id="prev-redirected">—</b></div><div>Pending <b id="prev-pending">—</b></div>
+      <div>Came <b id="prev-came">—</b></div>
+      <div>Delivered <b id="prev-delivered">—</b></div>
+      <div>Redirected <b id="prev-redirected">—</b></div>
+      <div>Pending <b id="prev-pending">—</b></div>
     </div>
   </div>
+
   <div class="card"><h3>Today's Delivery</h3>
     <label>Kits Came Today<input type="number" id="kits-came" min="0" required></label>
     <label>Kits Delivered<input type="number" id="kits-delivered" min="0" value="0"></label>
     <label>Redirected<input type="number" id="redirected" min="0" value="0"></label>
   </div>
+
   <div class="card"><h3>Pending</h3>
     <label>Mobile Number Invalid<input type="number" id="mobile-invalid" min="0" value="0"></label>
     <label>Address Not Found<input type="number" id="address-not-found" min="0" value="0"></label>
     <label>Torn Condition<input type="number" id="torn-condition" min="0" value="0"></label>
   </div>
+
   <div class="card"><h3>Incomplete Set <span>Total: <b id="total-incomplete">0</b></span></h3>
-    <div id="incomplete-rows"></div><button type="button" id="add-incomplete-set" class="btn btn-outline">+ Add Set</button>
+    <div id="incomplete-rows"></div>
+    <button type="button" id="add-incomplete-set" class="btn btn-outline">+ Add Set</button>
   </div>
+
   <div class="card"><h3>Complete Set Pending <span>Total: <b id="total-complete">0</b></span></h3>
-    <div id="complete-rows"></div><button type="button" id="add-complete-set" class="btn btn-outline">+ Add Set</button>
+    <div id="complete-rows"></div>
+    <button type="button" id="add-complete-set" class="btn btn-outline">+ Add Set</button>
   </div>
+
   <div id="spm-update-notification"></div>
-  <div class="card summary-card"><div>TOTAL PENDING <b id="total-pending">0</b></div><div>DELIVERY % <b id="delivery-percent">0.0%</b></div></div>
-  <div class="action-row"><button type="button" id="btn-save-draft" class="btn btn-secondary">SAVE DRAFT</button><button type="button" id="btn-submit" class="btn btn-primary">SUBMIT</button></div>
+
+  <div class="card summary-card">
+    <div>TOTAL PENDING <b id="total-pending">0</b></div>
+    <div>DELIVERY % <b id="delivery-percent">0.0%</b></div>
+  </div>
+
+  <div class="action-row">
+    <button type="button" id="btn-save-draft" class="btn btn-secondary">SAVE DRAFT</button>
+    <button type="button" id="btn-submit" class="btn btn-primary">SUBMIT</button>
+  </div>
 </form>
 </main>
 
 <main id="screen-dashboard" class="screen hidden">
 <div class="admin-dashboard">
 <header class="admin-dashboard-header">
-  <div><p class="admin-eyebrow">PMV TOOLKIT</p><h1>Daily SPM Update Monitor</h1><p>Monitoring date: <strong id="admin-selected-date">—</strong></p></div>
-  <div><label>Date<input id="admin-dashboard-date" type="date"></label><button id="admin-dashboard-refresh" type="button">Refresh</button></div>
+  <div>
+    <p class="admin-eyebrow">PMV TOOLKIT</p>
+    <h1>Daily SPM Update Monitor</h1>
+    <p>Monitoring date: <strong id="admin-selected-date">—</strong></p>
+  </div>
+  <div>
+    <label>Date<input id="admin-dashboard-date" type="date"></label>
+    <button id="admin-dashboard-refresh" type="button">Refresh</button>
+  </div>
 </header>
+
 <div id="admin-dashboard-status" class="admin-status">Loading…</div>
+
 <section class="admin-kpi-grid">
   <article><span>SPMs Updated Today</span><strong id="admin-updated-count">0</strong></article>
   <article><span>Active SPMs</span><strong id="admin-total-count">0</strong></article>
   <article><span>Pending Updates</span><strong id="admin-pending-count">0</strong></article>
-  <article><span>Completion</span><strong id="admin-completion-percent">0%</strong><div class="admin-progress-track"><div id="admin-progress-bar" class="admin-progress-bar"></div></div></article>
+  <article>
+    <span>Completion</span>
+    <strong id="admin-completion-percent">0%</strong>
+    <div class="admin-progress-track"><div id="admin-progress-bar" class="admin-progress-bar"></div></div>
+  </article>
 </section>
+
 <section class="admin-panel"><h2>Office-wise Pending Updates</h2>
-<table class="admin-table"><thead><tr><th>Office</th><th>Total SPMs</th><th>Updated</th><th>Pending</th><th>Completion</th>
+<table class="admin-table"><thead><tr>
+<th>Office</th><th>Total SPMs</th><th>Updated</th><th>Pending</th><th>Completion</th>
 <th>Kits Came</th><th>Delivered</th><th>Redirected</th><th>Mobile Invalid</th>
 <th>Address Not Found</th><th>Torn</th><th>Incomplete Kits</th><th>Complete Kits</th>
-<th>Total Pending</th><th>Delivery %</th></tr></thead><tbody id="admin-office-rows"></tbody></table></section>
+<th>Total Pending</th><th>Delivery %</th>
+</tr></thead><tbody id="admin-office-rows"></tbody></table>
+</section>
+
 <section class="admin-panel">
 <h2>Consolidated Kits & Daily Field Report</h2>
 <div class="table-scroll">
@@ -110,8 +146,13 @@
 </table>
 </div>
 </section>
+
 <section class="admin-panel"><h2>SPMs Who Have Not Updated</h2>
-<table class="admin-table"><thead><tr><th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th><th>Status</th></tr></thead><tbody id="admin-pending-rows"></tbody></table></section>
+<table class="admin-table"><thead><tr>
+<th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th><th>Status</th>
+</tr></thead><tbody id="admin-pending-rows"></tbody></table>
+</section>
+
 </div>
 </main>
 </section>
