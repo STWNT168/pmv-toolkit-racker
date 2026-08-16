@@ -3,7 +3,7 @@
  * No passwords or secrets belong in this file.
  */
 const CONFIG = Object.freeze({
-  API_URL: "https://script.google.com/macros/s/AKfycbx-OuPXs75xUz6cKOEtU-UGkjdA37LP53DMW5hU8nIEWlniAzZ3ztLF7iIaCk7l17WSRQ/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbz6Wu4Q0bpdnAGCszKURGR-nsXCRT2XEkbOqDFNkJAdiwX79aD9zhiQDlXsBb0ATrRrHQ/exec",
 
   APP_NAME: "PMV Toolkit Management System",
   SHORT_NAME: "PMV Tracker",
