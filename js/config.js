@@ -3,7 +3,7 @@
  * V5.0.4 dashboard/API fix.
  */
 const CONFIG = Object.freeze({
-  API_URL: "https://script.google.com/macros/s/AKfycbyOXpw5wI22zKWDlQN0DFNHUh5Yulhx7VZey6Yo8Yycf2zzkhROpPuRW9zdt2dEUcRw/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbxRqGsRp8mkVQL2KOYYUZyReglMJjfsEc7LX-gtrX7XIo9J5tI4v-EBdDm2kI86iAzI/exec",
   APP_NAME: "PMV Toolkit Management System",
   SHORT_NAME: "PMV Tracker",
   VERSION: "5.0.4",
