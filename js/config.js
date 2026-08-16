@@ -1,16 +1,16 @@
 /**
  * Central configuration.
- * No passwords or secrets belong in this file.
+ * V5.0.4 dashboard/API fix.
  */
 const CONFIG = Object.freeze({
-  API_URL: "AKfycbwqvDnfAC6ICego36HMebIJPm-n2NW_zr_UOa9Hxmyi-KvH5uHARSkCAUD9zl9r1qHDvg",
+  API_URL: "https://script.google.com/macros/s/AKfycbwqvDnfAC6ICego36HMebIJPm-n2NW_zr_UOa9Hxmyi-KvH5uHARSkCAUD9zl9r1qHDvg/exec",
   APP_NAME: "PMV Toolkit Management System",
   SHORT_NAME: "PMV Tracker",
-  VERSION: "5.0.0",
+  VERSION: "5.0.4",
   DIVISION_NAME: "Udhampur Division",
   ROLES: Object.freeze({ SPM: "SPM", DPS: "DPS", ADMIN: "ADMIN" }),
   DB_NAME: "pmv_toolkit_db",
-  DB_VERSION: 2,
+  DB_VERSION: 3,
   STORE_DRAFTS: "drafts",
   STORE_PENDING_SYNC: "pending_sync",
   STORE_HISTORY_CACHE: "history_cache",
