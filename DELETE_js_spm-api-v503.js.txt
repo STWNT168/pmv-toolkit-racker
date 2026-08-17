@@ -1,0 +1,3 @@
+DELETE this old file from the repository: js/spm-api-v503.js
+Reason: it references Api.request(), which is not part of the current public Api object.
+The current js/api.js already implements getOwnTodayRecord() and deleteOwnTodayRecord().

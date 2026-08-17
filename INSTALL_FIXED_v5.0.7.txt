@@ -1,0 +1,39 @@
+PMV TOOLKIT v5.0.7 FIXED PACKAGE
+================================
+
+This is a replacement/fix package for the current STWNT168/pmv-toolkit-racker
+repository.
+
+REPLACE THESE FILES:
+  .github/workflows/jekyll-gh-pages.yml  -> REMOVE
+  .github/workflows/pages.yml             -> ADD
+  .nojekyll                                -> ADD
+  js/api.js                                -> REPLACE
+  js/config.js                             -> REPLACE
+  sw.js                                    -> REPLACE
+
+DELETE:
+  js/spm-api-v503.js
+
+WHY:
+1. GitHub Pages was using Jekyll for a plain static HTML/JS app.
+2. The old spm-api-v503.js expects an Api.request() public function that the
+   current api.js does not expose.
+3. API errors were being reduced to a generic/non-diagnostic message.
+4. The service worker was caching v5.0.6 and could keep serving old JS.
+
+IMPORTANT:
+This package cannot redeploy the Google Apps Script for you. The API URL in
+js/config.js is still the current deployment URL. If the site continues to
+show a server error after this package is installed, the remaining problem is
+inside the deployed Apps Script version or its Google Spreadsheet.
+
+AFTER INSTALL:
+1. Commit/push the files to branch "(root)".
+2. GitHub Actions should run "Deploy PMV Toolkit to GitHub Pages".
+3. Open the site in a private/incognito window once.
+4. If a server error remains, the new API.js will show the action name and
+   a short preview of the actual server response, instead of hiding it.
+
+Do NOT create a second Google Apps Script deployment just for this package
+unless the current /exec deployment is known to be outdated.

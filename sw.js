@@ -1,4 +1,4 @@
-const CACHE="pmv-toolkit-v5.0.6";
+const CACHE="pmv-toolkit-v5.0.7";
 const ASSETS=[
   "./","./index.html","./manifest.json",
   "./css/style.css","./css/admin-dashboard.css","./css/spm-notification.css",
