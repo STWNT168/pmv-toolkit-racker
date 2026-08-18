@@ -1,1004 +1,198 @@
 const SPM = (() => {
-
+  let initialized = false;
   let office = null;
   let todayRecord = null;
-  let initialized = false;
 
-  const OFFICE_CACHE_KEY = "pmv_user_office";
+  const ids = [
+    "all-kits","similar-article",
+    "invalid-mobile-kits","deliverable-kits","incomplete-kits","without-proper-details-kits",
+    "invalid-mobile-articles","deliverable-articles","incomplete-articles","without-proper-details-articles"
+  ];
 
+  const map = {
+    "all-kits":"allKits",
+    "similar-article":"similarArticle",
+    "invalid-mobile-kits":"invalidMobileKits",
+    "deliverable-kits":"deliverableKits",
+    "incomplete-kits":"incompleteKits",
+    "without-proper-details-kits":"withoutProperDetailsKits",
+    "invalid-mobile-articles":"invalidMobileArticles",
+    "deliverable-articles":"deliverableArticles",
+    "incomplete-articles":"incompleteArticles",
+    "without-proper-details-articles":"withoutProperDetailsArticles"
+  };
 
-  // =========================================================
-  // INITIALIZE
-  // =========================================================
+  function val(id) {
+    const n = Number(document.getElementById(id)?.value || 0);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  }
 
-  async function init() {
-
-    if (initialized) return;
-
-    initialized = true;
-
+  function data() {
     const s = Auth.getSession();
+    return {
+      id: todayRecord?.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+      date: document.getElementById("spm-date").value,
+      officeId: office?.officeId || s?.officeId || "",
+      officeName: office?.officeName || s?.officeName || "",
+      spmId: s?.userId || "",
+      spmName: s?.name || "",
+      allKits: val("all-kits"),
+      similarArticle: val("similar-article"),
+      invalidMobileKits: val("invalid-mobile-kits"),
+      deliverableKits: val("deliverable-kits"),
+      incompleteKits: val("incomplete-kits"),
+      withoutProperDetailsKits: val("without-proper-details-kits"),
+      invalidMobileArticles: val("invalid-mobile-articles"),
+      deliverableArticles: val("deliverable-articles"),
+      incompleteArticles: val("incomplete-articles"),
+      withoutProperDetailsArticles: val("without-proper-details-articles")
+    };
+  }
 
-    if (!s) return;
+  function setOffice(x) {
+    office = x;
+    const el = document.getElementById("spm-office");
+    if (!el || !x) return;
+    el.innerHTML = "";
+    const o = document.createElement("option");
+    o.value = x.officeId;
+    o.textContent = x.officeName;
+    o.selected = true;
+    el.appendChild(o);
+    el.disabled = true;
+  }
 
-    const d = document.getElementById("spm-date");
-
-    if (!d) {
-      throw new Error("Daily Entry form is missing.");
-    }
-
-    d.value = UI.todayISO();
-    d.max = UI.todayISO();
-
-
-    // ---------------------------------------------------------
-    // IMPORTANT:
-    // Load cached/session office FIRST.
-    // Do not wait for Google Apps Script.
-    // ---------------------------------------------------------
-
-    const immediateOffice = getImmediateOffice(s);
-
-    if (immediateOffice) {
-
-      setOffice(immediateOffice);
-
-    } else {
-
-      showOfficeLoading();
-
-    }
-
-
-    // ---------------------------------------------------------
-    // Then verify office from server
-    // ---------------------------------------------------------
-
-    try {
-
-      await loadUser(s);
-
-    } catch (e) {
-
-      console.error("Office loading error:", e);
-
-      // Do NOT leave "Loading Office..."
-      if (!office) {
-        showOfficeError();
-      }
-
-      UI.toast(
-        e.message || "Could not load office information.",
-        "error"
-      );
-    }
-
-
-    bind();
-
-    await refreshTodayStatus();
-
-    await loadPrevious();
-
+  function fill(r) {
+    ids.forEach(id => {
+      const key = map[id];
+      const el = document.getElementById(id);
+      if (el) { el.value = r[key] ?? 0; el.disabled = true; }
+    });
+    document.getElementById("btn-submit").disabled = true;
     recalculate();
   }
 
-
-  // =========================================================
-  // GET OFFICE IMMEDIATELY FROM SESSION / CACHE
-  // =========================================================
-
-  function getImmediateOffice(s) {
-
-    // First preference: current login session
-
-    if (
-      s &&
-      s.officeId &&
-      s.officeName
-    ) {
-
-      return {
-        officeId: String(s.officeId).trim(),
-        officeName: String(s.officeName).trim()
-      };
-
-    }
-
-
-    // Second preference: local cache
-
-    try {
-
-      const cached =
-        localStorage.getItem(OFFICE_CACHE_KEY);
-
-      if (cached) {
-
-        const parsed = JSON.parse(cached);
-
-        if (
-          parsed &&
-          parsed.officeId &&
-          parsed.officeName
-        ) {
-
-          return {
-            officeId: String(parsed.officeId).trim(),
-            officeName: String(parsed.officeName).trim()
-          };
-
-        }
-      }
-
-    } catch (e) {
-
-      console.warn(
-        "Office cache read failed:",
-        e
-      );
-
-    }
-
-    return null;
-  }
-
-
-  // =========================================================
-  // SET OFFICE IN UI
-  // =========================================================
-
-  function setOffice(data) {
-
-    if (
-      !data ||
-      !data.officeId ||
-      !data.officeName
-    ) {
-      return;
-    }
-
-    office = {
-      officeId: String(data.officeId).trim(),
-      officeName: String(data.officeName).trim()
-    };
-
-
-    const e =
-      document.getElementById("spm-office");
-
-    if (!e) return;
-
-
-    e.innerHTML = "";
-
-    const option =
-      document.createElement("option");
-
-    option.value = office.officeId;
-
-    option.textContent =
-      office.officeName;
-
-    option.selected = true;
-
-    e.appendChild(option);
-
-    e.value = office.officeId;
-
-    e.disabled = true;
-
-    e.setAttribute(
-      "aria-disabled",
-      "true"
-    );
-
-
-    // Save session
-
-    const s = Auth.getSession();
-
-    if (s) {
-
-      s.officeId =
-        office.officeId;
-
-      s.officeName =
-        office.officeName;
-
-      Auth.setSession(s).catch(
-        console.error
-      );
-    }
-
-
-    // Save local cache
-
-    try {
-
-      localStorage.setItem(
-        OFFICE_CACHE_KEY,
-        JSON.stringify(office)
-      );
-
-    } catch (e) {
-
-      console.warn(
-        "Could not cache office:",
-        e
-      );
-    }
-  }
-
-
-  // =========================================================
-  // LOADING STATE
-  // =========================================================
-
-  function showOfficeLoading() {
-
-    const e =
-      document.getElementById("spm-office");
-
-    if (!e) return;
-
-    e.innerHTML =
-      '<option value="">Loading Office…</option>';
-
-    e.disabled = true;
-  }
-
-
-  // =========================================================
-  // ERROR STATE
-  // =========================================================
-
-  function showOfficeError() {
-
-    const e =
-      document.getElementById("spm-office");
-
-    if (!e) return;
-
-    e.innerHTML =
-      '<option value="">Office unavailable</option>';
-
-    e.disabled = true;
-  }
-
-
-  // =========================================================
-  // LOAD USER FROM SERVER
-  // =========================================================
-
-  async function loadUser(s) {
-
-    const r =
-      await Api.getUser(s.userId);
-
-
-    if (!r.success) {
-
-      throw new Error(
-        r.message ||
-        "Could not load user."
-      );
-    }
-
-
-    const officeId =
-      String(
-        r.data?.officeId || ""
-      ).trim();
-
-    const officeName =
-      String(
-        r.data?.officeName || ""
-      ).trim();
-
-
-    if (!officeId || !officeName) {
-
-      throw new Error(
-        "Your office is not configured in USER_MASTER."
-      );
-    }
-
-
-    // Update UI immediately after server verification
-
-    setOffice({
-      officeId,
-      officeName
+  function clear() {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = 0; el.disabled = false; }
     });
-
-
-    // Update session information
-
-    s.officeId = officeId;
-
-    s.officeName = officeName;
-
-    s.name =
-      r.data.name ||
-      s.name;
-
-    s.role =
-      r.data.role ||
-      s.role;
-
-
-    await Auth.setSession(s);
+    document.getElementById("btn-submit").disabled = false;
+    todayRecord = null;
+    recalculate();
   }
 
-
-  // =========================================================
-  // EVENT BINDING
-  // =========================================================
-
-  function bind() {
-
-    document
-      .getElementById("spm-date")
-      .addEventListener(
-        "change",
-        async () => {
-
-          await refreshTodayStatus();
-
-          await loadPrevious();
-
-          recalculate();
-        }
-      );
-
-
-    document
-      .getElementById("spm-form")
-      .addEventListener(
-        "input",
-        recalculate
-      );
-
-
-    document
-      .getElementById("add-incomplete-set")
-      .onclick = () =>
-        addRow("incomplete");
-
-
-    document
-      .getElementById("add-complete-set")
-      .onclick = () =>
-        addRow("complete");
-
-
-    document
-      .getElementById("btn-save-draft")
-      .onclick = saveDraft;
-
-
-    document
-      .getElementById("btn-submit")
-      .onclick = submit;
+  function notice(text, cls) {
+    const el = document.getElementById("spm-update-notification");
+    if (!el) return;
+    el.className = cls || "";
+    el.textContent = text || "";
   }
 
-
-  // =========================================================
-  // TODAY STATUS
-  // =========================================================
-
-  async function refreshTodayStatus() {
-
-    if (
-      UI.todayISO() !==
-      document.getElementById("spm-date").value
-    ) {
-      return;
-    }
-
-
+  async function loadOffice() {
+    const s = Auth.getSession();
+    if (!s) return;
     try {
-
-      const r =
-        await Api.getOwnTodayRecord();
-
-      todayRecord =
-        r.success
-          ? r.data
-          : null;
-
-      renderNotice();
-
+      const r = await Api.getUser(s.userId);
+      if (!r.success) throw new Error(r.message || "Unable to load office.");
+      setOffice({officeId: String(r.data.officeId), officeName: String(r.data.officeName)});
+      s.officeId = String(r.data.officeId);
+      s.officeName = String(r.data.officeName);
+      s.name = r.data.name || s.name;
+      await Auth.setSession(s);
     } catch (e) {
-
-      renderNotice(
-        e.message ||
-        "Could not verify today's submission."
-      );
+      const el = document.getElementById("spm-office");
+      if (el) { el.innerHTML = '<option value="">Office unavailable</option>'; el.disabled = true; }
+      notice(e.message, "spm-notify-warning");
     }
   }
 
-
-  // =========================================================
-  // NOTIFICATION
-  // =========================================================
-
-  function renderNotice(error) {
-
-    const b =
-      document.getElementById(
-        "spm-update-notification"
-      );
-
-    if (!b) return;
-
-
-    if (error) {
-
-      b.className =
-        "spm-notify-warning";
-
-      b.textContent = error;
-
-      return;
-    }
-
-
-    if (!todayRecord) {
-
-      b.className =
-        "spm-notify-pending";
-
-      b.innerHTML =
-        "<strong>Update Pending</strong>" +
-        "<span>Today's PMV Toolkit information has not been updated yet.</span>";
-
-      return;
-    }
-
-
-    b.className =
-      "spm-notify-complete";
-
-    b.innerHTML =
-      "<strong>Today's update is submitted.</strong>" +
-      "<button type='button' id='spm-delete-today-now'>" +
-      "DELETE TODAY'S ENTRY" +
-      "</button>";
-
-
-    document
-      .getElementById(
-        "spm-delete-today-now"
-      )
-      .onclick = deleteToday;
-  }
-
-
-  // =========================================================
-  // DELETE TODAY
-  // =========================================================
-
-  async function deleteToday() {
-
-    if (!todayRecord) return;
-
-
-    if (
-      !await UI.confirmModal(
-        "Delete Today's Entry",
-        "This deletes all of your PMV rows for today. You can submit again after deletion.",
-        "DELETE TODAY"
-      )
-    ) {
-      return;
-    }
-
-
+  async function refreshToday() {
     try {
-
-      const r =
-        await Api.deleteOwnTodayRecord(
-          todayRecord.id
-        );
-
-
-      if (!r.success) {
-
-        UI.toast(
-          r.message ||
-          "Delete failed",
-          "error"
-        );
-
-        return;
+      const r = await Api.getOwnTodayRecord();
+      todayRecord = r.success ? r.data : null;
+      if (todayRecord) {
+        fill(todayRecord);
+        notice("Today's report is already submitted. Duplicate submission is blocked.", "spm-notify-complete");
+      } else {
+        notice("Today's report has not been submitted yet.", "spm-notify-pending");
+        clear();
       }
-
-
-      todayRecord = null;
-
-      renderNotice();
-
-      UI.toast(
-        "Today's entry deleted. You can submit a corrected entry now.",
-        "success"
-      );
-
     } catch (e) {
-
-      UI.toast(
-        e.message ||
-        "Delete failed.",
-        "error"
-      );
+      notice(e.message || "Unable to verify today's submission.", "spm-notify-warning");
     }
   }
-
-
-  // =========================================================
-  // PREVIOUS DAY
-  // =========================================================
-
-  async function loadPrevious() {
-
-    const d =
-      document.getElementById(
-        "spm-date"
-      ).value;
-
-
-    if (!office || !d) return;
-
-
-    try {
-
-      const r =
-        await Api.getPreviousDay(
-          office.officeId,
-          d
-        );
-
-
-      const x =
-        r.success
-          ? r.data
-          : null;
-
-
-      UI.setText(
-        "prev-came",
-        x?.kitsCameToday ?? "—"
-      );
-
-      UI.setText(
-        "prev-delivered",
-        x?.kitsDelivered ?? "—"
-      );
-
-      UI.setText(
-        "prev-redirected",
-        x?.redirected ?? "—"
-      );
-
-      UI.setText(
-        "prev-pending",
-        x?.currentPending ?? "—"
-      );
-
-    } catch (_) {
-
-      UI.setText(
-        "prev-came",
-        "—"
-      );
-
-      UI.setText(
-        "prev-delivered",
-        "—"
-      );
-
-      UI.setText(
-        "prev-redirected",
-        "—"
-      );
-
-      UI.setText(
-        "prev-pending",
-        "—"
-      );
-    }
-  }
-
-
-  // =========================================================
-  // ADD SET
-  // =========================================================
-
-  function addRow(kind) {
-
-    const incomplete =
-      kind === "incomplete";
-
-    const c =
-      document.getElementById(
-        incomplete
-          ? "incomplete-rows"
-          : "complete-rows"
-      );
-
-    const q =
-      incomplete
-        ? "kitsIncomplete"
-        : "kitsComplete";
-
-
-    const r =
-      document.createElement("div");
-
-    r.className = "set-row";
-
-
-    const n =
-      c.children.length + 1;
-
-
-    r.innerHTML =
-      `<b>Set ${n}</b>` +
-
-      `<label>Set Number
-        <input
-          type="number"
-          min="0"
-          class="set-number">
-      </label>` +
-
-      `<label>
-        ${incomplete
-          ? "Kits Incomplete"
-          : "Kits Complete"}
-        <input
-          type="number"
-          min="0"
-          class="${q}"
-          value="0">
-      </label>`;
-
-
-    c.appendChild(r);
-  }
-
-
-  // =========================================================
-  // ROW DATA
-  // =========================================================
-
-  function rows(kind) {
-
-    const incomplete =
-      kind === "incomplete";
-
-
-    const c =
-      document.getElementById(
-        incomplete
-          ? "incomplete-rows"
-          : "complete-rows"
-      );
-
-
-    const q =
-      incomplete
-        ? "kitsIncomplete"
-        : "kitsComplete";
-
-
-    return [
-      ...c.querySelectorAll(
-        ".set-row"
-      )
-    ].map(r => ({
-
-      setNumber:
-        r.querySelector(
-          ".set-number"
-        )?.value || "",
-
-      [q]:
-        r.querySelector(
-          "." + q
-        )?.value || 0
-
-    }));
-  }
-
-
-  // =========================================================
-  // VALUE
-  // =========================================================
-
-  function v(id) {
-
-    return (
-      document.getElementById(id)?.value ||
-      "0"
-    );
-  }
-
-
-  // =========================================================
-  // DAILY DATA
-  // =========================================================
-
-  function data() {
-
-    const s =
-      Auth.getSession();
-
-
-    return {
-
-      date:
-        document.getElementById(
-          "spm-date"
-        ).value,
-
-      officeId:
-        office?.officeId ||
-        s?.officeId ||
-        "",
-
-      officeName:
-        office?.officeName ||
-        s?.officeName ||
-        "",
-
-      spmId:
-        s?.userId || "",
-
-      spmName:
-        s?.name || "",
-
-      kitsCameToday:
-        v("kits-came"),
-
-      kitsDelivered:
-        v("kits-delivered"),
-
-      redirected:
-        v("redirected"),
-
-      mobileInvalid:
-        v("mobile-invalid"),
-
-      addressNotFound:
-        v("address-not-found"),
-
-      torn:
-        v("torn-condition"),
-
-      incompleteRows:
-        rows("incomplete"),
-
-      completeRows:
-        rows("complete")
-    };
-  }
-
-
-  // =========================================================
-  // CALCULATE
-  // =========================================================
 
   function recalculate() {
-
-    const d = data();
-
-    const p =
-      Calculations.calculateTotalPending(d);
-
-    const pct =
-      Calculations.calculateDeliveryPercent(
-        d.kitsDelivered,
-        d.kitsCameToday
-      );
-
-
-    UI.setText(
-      "total-incomplete",
-      Calculations.sumIncompleteKits(
-        d.incompleteRows
-      )
-    );
-
-
-    UI.setText(
-      "total-complete",
-      Calculations.sumCompleteKits(
-        d.completeRows
-      )
-    );
-
-
-    UI.setText(
-      "total-pending",
-      p
-    );
-
-
-    UI.setText(
-      "delivery-percent",
-      pct.toFixed(1) + "%"
-    );
-
-
-    return {
-      totalPending: p,
-      deliveryPct: pct
-    };
+    const r = data();
+    const kc = Calculations.kitCheck(r);
+    const ac = Calculations.articleCheck(r);
+    document.getElementById("summary-deliverable-kits").textContent = r.deliverableKits;
+    document.getElementById("summary-incomplete-kits").textContent = r.incompleteKits;
+    document.getElementById("summary-kit-check").textContent = `${kc.categories} / ${kc.total}`;
+    document.getElementById("summary-article-check").textContent = `${ac.categories} / ${ac.total}`;
   }
-
-
-  // =========================================================
-  // SAVE DRAFT
-  // =========================================================
-
-  async function saveDraft() {
-
-    const d = data();
-
-    await Storage.saveDraft(
-      d.date,
-      d.officeId,
-      d
-    );
-
-    UI.toast(
-      "Draft saved on this device.",
-      "success"
-    );
-  }
-
-
-  // =========================================================
-  // SUBMIT
-  // =========================================================
 
   async function submit() {
-
-    const d = data();
-
-
-    const validation =
-      Validation.validateDailyRecord(d);
-
-
-    if (!validation.valid) {
-
-      UI.toast(
-        validation.errors[0],
-        "error"
-      );
-
+    const r = data();
+    const v = Validation.validateDailyRecord(r);
+    if (!v.valid) {
+      notice(v.errors[0], "spm-notify-warning");
       return;
     }
 
-
-    const t =
-      recalculate();
-
-
-    if (
-      !await UI.confirmModal(
-
-        "Confirm Submission",
-
-        `Office: <b>${escapeHtml(
-          d.officeName
-        )}</b><br>` +
-
-        `Pending: <b>${t.totalPending}</b><br>` +
-
-        `Delivery: <b>${t.deliveryPct.toFixed(
-          1
-        )}%</b>`,
-
-        "CONFIRM"
-      )
-    ) {
-      return;
-    }
-
-
-    const r = {
-
-      id:
-        `${d.date}_${d.officeId}_${
-          crypto.randomUUID?.() ||
-          Date.now()
-        }`,
-
-      ...d,
-
-      totalPending:
-        t.totalPending,
-
-      deliveryPercentage:
-        t.deliveryPct,
-
-      submittedAt:
-        new Date().toISOString()
-    };
-
+    const b = document.getElementById("btn-submit");
+    b.disabled = true;
 
     try {
-
-      const x =
-        await Api.submitDailyRecord(
-          r,
-          Auth.getSession()
-        );
-
-
-      if (x.success) {
-
-        await Storage.clearDraft(
-          d.date,
-          d.officeId
-        );
-
-        await refreshTodayStatus();
-
-        UI.toast(
-          "Update submitted successfully.",
-          "success"
-        );
-
-      } else {
-
-        UI.toast(
-          x.message ||
-          "Submission rejected.",
-          "error"
-        );
-      }
-
+      const result = await Api.submitDailyRecord(r, Auth.getSession());
+      if (!result.success) throw new Error(result.message || "Submission failed.");
+      notice(result.message || "Report submitted successfully.", "spm-notify-complete");
+      todayRecord = { ...r, id: result.data?.recordId || r.id };
+      fill(todayRecord);
+      UI.toast("PMV Toolkit report submitted.", "success");
     } catch (e) {
-
-      UI.toast(
-        e.message ||
-        "Submission failed.",
-        "error"
-      );
+      notice(e.message || "Submission failed.", "spm-notify-warning");
+      b.disabled = false;
     }
   }
 
-
-  // =========================================================
-  // HTML ESCAPE
-  // =========================================================
-
-  function escapeHtml(s) {
-
-    return String(s || "")
-      .replace(
-        /[&<>"']/g,
-        c => ({
-
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#039;"
-
-        }[c])
-      );
+  async function saveDraft() {
+    const r = data();
+    try {
+      await Storage.saveDraft(r.date, r.officeId, r);
+      UI.toast("Draft saved on this device.", "success");
+    } catch (e) {
+      UI.toast(e.message || "Unable to save draft.", "error");
+    }
   }
 
+  function bind() {
+    document.getElementById("spm-form").addEventListener("input", recalculate);
+    document.getElementById("btn-submit").onclick = submit;
+    document.getElementById("btn-save-draft").onclick = saveDraft;
+    document.getElementById("spm-date").onchange = refreshToday;
+  }
 
-  return {
-    init,
-    recalculate
-  };
+  async function init() {
+    if (initialized) return;
+    initialized = true;
+    const s = Auth.getSession();
+    if (!s) return;
 
+    const d = document.getElementById("spm-date");
+    d.value = UI.todayISO();
+    d.max = UI.todayISO();
+
+    setOffice({
+      officeId: String(s.officeId || ""),
+      officeName: String(s.officeName || "")
+    });
+    await loadOffice();
+    bind();
+    await refreshToday();
+    recalculate();
+  }
+
+  return { init, recalculate };
 })();
